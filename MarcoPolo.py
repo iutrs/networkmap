@@ -117,18 +117,18 @@ class NetworkDevice(object):
 		
 	def __str__(self):
 		return \
-		( 
+		(
 			"\
-			MAC 			: {0}\n \
-			IP Address 		: {1}\n \
-			IP Address type 	: {2}\n \
-			Name 			: {3}\n \
-			Description 		: {4}\n \
-			Local port 		: {5}\n \
-			Remote port 		: {6}\n \
-			Supported capabilities 	: {7}\n \
-			Enabled capabilities 	: {8}\n".format(
-		    self.mac_address,
+			MAC			: {0}\n \
+			IP Address		: {1}\n \
+			IP Address type		: {2}\n \
+			Name			: {3}\n \
+			Description		: {4}\n \
+			Local port		: {5}\n \
+			Remote port		: {6}\n \
+			Supported capabilities	: {7}\n \
+			Enabled capabilities	: {8}\n".format(
+			self.mac_address,
 			self.ip_address,
 			self.ip_address_type,
 			self.system_name,
@@ -348,24 +348,22 @@ class NetworkExplorer(object):
 				.buildNetwordDevicesFromCDPInformation(devices_details)
 		
 	def _open_ssh_connection(self, hostname):
-		print("Connecting to {0}...".format(hostname))
-		
 		try:
+			print("Connecting to {0}...".format(hostname))
 			self.ssh.connect(hostname,
 				username=self.ssh_username,
 				password=self.ssh_password)
 				
 			self.shell = self.ssh.invoke_shell()
 			self.shell.settimeout(self.ssh_timeout)
+			print("Connected to {0}.".format(hostname))
 		except socket.error as se:
 			print("Socket error: {0}".format(se))
 		except paramiko.AuthenticationException as pae:
 			print("Authentication error: {0}".format(pae))
 		except Exception as e:
 			print("Unexpected error: {0}".format(e))
-		
-		print("Connected to {0}.".format(hostname))
-		
+
 	def _close_ssh_connection(self):
 		try:
 			self.shell.close()
@@ -423,20 +421,28 @@ if __name__ == "__main__":
 		try:
 			config.read(config_file)
 			
-			source_address = config.get('DEFAULT', 'SourceAddress')	
+			source_address = config.get('DEFAULT', 'SourceAddress')
 			origin = NetworkDevice(ip_address = source_address, local_port = '?')
-
+			
 			MarcoPolo = NetworkExplorer()
 			devices = {}
-		
-			print("\nStarting Marco Polo's network exploration.\n")
-			MarcoPolo.explore_cdp(origin, devices)
-			#MarcoPolo.explore_lldp(origin, devices)
-	
-			print("\nMarco Polo found {0} devices.".format(len(devices)))
 			
-			for device in devices.values():
-				print(str(device))
+			protocol = config.get('DEFAULT', 'Protocol')
+			
+			if protocol == "LLDP":
+				print("\nStarting Marco Polo's network exploration on LLDP.\n")
+				MarcoPolo.explore_lldp(origin, devices)
+			elif protocol == "CDP":
+				print("\nStarting Marco Polo's network exploration on CDP.\n")
+				MarcoPolo.explore_cdp(origin, devices)
+			else:
+				print("Unsupported protocol '{0}'.".format(protocol))
+			
+			if len(devices) > 0:
+				print("\nMarco Polo found {0} devices.".format(len(devices)))
+			
+				for device in devices.values():
+					print(str(device))
 			
 		except ConfigParser.Error as cpe:
 			print("Configuration error. {0}".format(cpe))

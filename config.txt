@@ -1,5 +1,6 @@
 [DEFAULT]
 SourceAddress = ?
+Protocol = LLDP
 
 [SSH]
 Timeout = 5

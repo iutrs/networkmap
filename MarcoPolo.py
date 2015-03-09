@@ -23,7 +23,6 @@ DEFAULT_PASSWORD = ""
 
 config = ConfigParser.RawConfigParser()
 
-
 class NetworkDevice(object):
 	def __init__(
 			self,
@@ -251,13 +250,14 @@ class NetworkDeviceBuilder(object):
 		value = tokens[1].replace(" ", "")
 		return (key, value)
 
-
 class NetworkExplorer(object):
 	def __init__(self):
 		self.ssh = paramiko.SSHClient()
 		self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 		
 		self.shell = None
+				
+		self.ignore_list = ()
 		
 		self.ssh_timeout = DEFAULT_TIMEOUT
 		self.ssh_max_bytes = DEFAULT_MAX_BYTES
@@ -265,11 +265,12 @@ class NetworkExplorer(object):
 		self.ssh_password = DEFAULT_PASSWORD
 		
 		try:
+			self.ignore_list = config.get('DEFAULT', 'Ignore').split()
+			
 			self.ssh_timeout = config.getfloat('SSH', 'Timeout')
 			self.ssh_max_bytes = config.getint('SSH', 'MaximumBytesToReceive')
 			self.ssh_username = config.get('SSH', 'Username')
 			self.ssh_password = config.get('SSH', 'Password')
-			
 		except ConfigParser.Error as cpe:
 			print("Configuration error: {0}".format(cpe))
 		except Exception as e:
@@ -285,15 +286,18 @@ class NetworkExplorer(object):
 		self._close_ssh_connection()
 		
 		for neighbor in neighbors:
-			if neighbor.is_valid_cdp_device() and neighbor.mac_address not in devices:
-				devices[neighbor.mac_address] = neighbor
-						
-				print("\n{0} [{1}] ------> [{2}] {3}\n"
-					.format(origin.ip_address, neighbor.remote_port,
-							neighbor.local_port, neighbor.ip_address))
+			if neighbor.is_valid_cdp_device() and \
+				neighbor.mac_address not in devices:
 				
-				#Let's recursively explore my neighbors' neighbors
-				devices = self.explore_cdp(neighbor, devices)
+				devices[neighbor.mac_address] = neighbor
+				
+				if neighbor.ip_address not in self.ignore_list:	
+					print("\n{0} [{1}] ------> [{2}] {3}\n"
+						.format(origin.ip_address, neighbor.remote_port,
+								neighbor.local_port, neighbor.ip_address))
+				
+					#Let's recursively explore my neighbors' neighbors
+					devices = self.explore_cdp(neighbor, devices)
 		
 		return devices
 	
@@ -309,15 +313,18 @@ class NetworkExplorer(object):
 		self._close_ssh_connection()
 		
 		for neighbor in neighbors:
-			if neighbor.is_valid_lldp_device() and neighbor.mac_address not in devices:
+			if neighbor.is_valid_lldp_device() and \
+				neighbor.mac_address not in devices:
+				
 				devices[neighbor.mac_address] = neighbor
+
+				if neighbor.ip_address not in self.ignore_list:
+					print("\n{0} [{1}] ------> [{2}] {3}\n"
+						.format(origin.ip_address, neighbor.remote_port,
+								neighbor.local_port, neighbor.ip_address))
 					
-				print("\n{0} [{1}] ------> [{2}] {3}\n"
-					.format(origin.ip_address, neighbor.remote_port,
-							neighbor.local_port, neighbor.ip_address))
-			
-				#Let's recursively explore my neighbors' neighbors
-				devices = self.explore_lldp(neighbor, devices)
+					#Let's recursively explore my neighbors' neighbors
+					devices = self.explore_lldp(neighbor, devices)
 		
 		return devices
 		
@@ -393,7 +400,7 @@ class NetworkExplorer(object):
 			self.shell.send(command)
 			
 			# TODO Change for a while loop until we've got everything
-			time.sleep(5) # Waiting for the server to display all the data
+			time.sleep(3) # Waiting for the server to display all the data
 			
 			result = self.shell.recv(self.ssh_max_bytes)
 			
@@ -413,21 +420,21 @@ def _parseargs():
 	return parser.parse_args()
 	
 if __name__ == "__main__":
-
+	
 	args = _parseargs()
 	config_file = args.config
 	
 	if os.path.isfile(config_file):
 		try:
 			config.read(config_file)
-			
+				
 			source_address = config.get('DEFAULT', 'SourceAddress')
 			origin = NetworkDevice(ip_address = source_address, local_port = '?')
 			
+			protocol = config.get('DEFAULT', 'Protocol')
+			
 			MarcoPolo = NetworkExplorer()
 			devices = {}
-			
-			protocol = config.get('DEFAULT', 'Protocol')
 			
 			if protocol == "LLDP":
 				print("\nStarting Marco Polo's network exploration on LLDP.\n")
@@ -443,7 +450,7 @@ if __name__ == "__main__":
 			
 				for device in devices.values():
 					print(str(device))
-			
+					
 		except ConfigParser.Error as cpe:
 			print("Configuration error. {0}".format(cpe))
 	else:

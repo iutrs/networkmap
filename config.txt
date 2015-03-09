@@ -1,7 +1,10 @@
 [DEFAULT]
-SourceAddress = ?
 Protocol = LLDP
-
+SourceAddress = ?
+Ignore = 
+	?
+	?
+	
 [SSH]
 Timeout = 5
 MaximumBytesToReceive = 4000000

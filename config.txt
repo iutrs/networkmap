@@ -1,10 +1,11 @@
 [DEFAULT]
 Protocol = LLDP
 SourceAddress = ?
+OutputFile = devices.json
 Ignore = 
 	?
 	?
-	
+
 [SSH]
 Timeout = 5
 MaximumBytesToReceive = 4000000

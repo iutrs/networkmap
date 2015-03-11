@@ -492,7 +492,9 @@ if __name__ == "__main__":
 	if os.path.isfile(config_file):
 		try:
 			config.read(config_file)
-				
+			
+			outputfile = config.get('DEFAULT', 'OutputFile')
+			
 			source_address = config.get('DEFAULT', 'SourceAddress')
 			origin = NetworkDevice(ip_address = source_address)
 			
@@ -513,12 +515,17 @@ if __name__ == "__main__":
 			if len(devices) > 0:
 				print("\nMarco Polo found {0} devices:".format(len(devices)))
 				print(origin.to_JSON())
+				
+				_file = open(outputfile, "w")
+				_file.write(origin.to_JSON())
+				_file.close()
 			else:
 				print("\nMarco Polo could not find anything.")
 				
-					
 		except ConfigParser.Error as cpe:
 			print("Configuration error. {0}".format(cpe))
+		except Exception as e:
+			print("Unexpected error. {0}".format(e))
 	else:
 		print("Could not find configuration file '{0}'.".format(config_file))
 		

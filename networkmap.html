@@ -3,7 +3,9 @@
 <head>
 	<title>networkmap</title>
 
-	<script type="text/javascript" src="http://www.google.com/jsapi"></script>
+	<!-- for mobile devices like android and iphone --> 
+	<meta name="viewport" content="target-densitydpi=device-dpi, width=device-width" />
+
 	<script type="text/javascript" src="./js/network-min.js"></script>
 	<script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
@@ -21,30 +23,12 @@
 		var linksTable = null;
 		var network = null;
 		
-		google.load('visualization', '1');
-		
-		// Set callback to run when API is loaded
-		google.setOnLoadCallback(drawVisualization);
-		
 		// Called when the Visualization API is loaded.
-		function drawVisualization() {
+		function draw() {
 			
-			// Nodes
-			nodesTable = new google.visualization.DataTable();
-			nodesTable.addColumn('number', 'id');
-			nodesTable.addColumn('string', 'text');
-			nodesTable.addColumn('string', 'style');
-			nodesTable.addColumn('number', 'group');
-			
-			// Links
-			linksTable = new google.visualization.DataTable();
-			linksTable.addColumn('number', 'from');
-			linksTable.addColumn('number', 'to');
-			linksTable.addColumn('string', 'style');
-			linksTable.addColumn('string', 'color');
-			linksTable.addColumn('number', 'width');
-			linksTable.addColumn('number', 'length');
-			linksTable.addColumn('string', 'title');
+			// Nodes and links tables
+			nodesTable = [];
+			linksTable = [];
 			
 			// Temporary alert
 			if (devices == null) {
@@ -54,58 +38,73 @@
 			// Iterate through the devices to add the nodes and the links
 			buildGraph(devices, nodesTable, linksTable, undefined, undefined)
 			
+			// Instantiate our graph object.
+			network = new links.Network(document.getElementById('networkmap'));
+			
+			// Add event listeners
+			links.events.addListener(network, 'select', onselect);
+			
 			// specify options
 			var options = {
-				width:  '600px',
-				height: '600px',
+				width:  '100%',
+				height: '100%',
 				stabilize: true,
 				selectable: true
 			};
-			
-			// Instantiate our graph object.
-			network = new links.Network(document.getElementById('networkmap'));
 			
 			//Draw our graph with the created data and options
 			network.draw(nodesTable, linksTable, options);
 		}
 		
-		function getNewID() {
-			return uniqueID += 1
-		}
-		
 		function buildGraph(device, nodesTable, linksTable, ID, parentID) {
 			ID = getNewID();
 			
-			nodesTable.addRow(
-				[
-					ID, 
-					device.system_name + "\n" + device.ip_address, 
-					'rect', 
-					1
-				]);
-			
+			nodesTable.push(
+				{
+					'id': ID, 
+					'text': device.system_name + "\n" + device.ip_address, 
+					'style': 'rect', 
+					'group': 1
+				});
+				
 			if (parentID > 0) {
-				linksTable.addRow(
-				[
-					ID, 
-					parentID, 
-					'line', 
-					undefined, 
-					2, 
-					222, 
-					'12'
-				]);
+				linksTable.push(
+				{
+					'from': ID, 
+					'to': parentID, 
+					'style': 'line', 
+					'color': undefined, 
+					'width': 2, 
+					'length': 222, 
+					'title': '12'
+				});
 			}
 			
 			for (var i = 0; i < device.children.length; i++) {
 				buildGraph(device.children[i], nodesTable, linksTable, ID+i+1, ID);
 			}
 		}
+		
+		function getNewID() {
+			return uniqueID+=1;
+		}
+		
+		function onselect() {
+			var selection = network.getSelection();
+			
+			var info = 'selected row(s): '  
+			for (var i = 0; i < selection.length; i++) {
+				info += selection[i].row + ' ';
+			}
+			
+			console.log('Selection: ' + JSON.stringify(selection));
+		}
+		
 	</script>
 	
 </head>
 
-<body>
+<body onload="draw();" onresize="network.redraw();">
 	<div id="networkmap"></div>
 </body>
 

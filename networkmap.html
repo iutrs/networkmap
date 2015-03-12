@@ -54,24 +54,40 @@
 		function buildGraph(device, nodesTable, linksTable, ID, parentID) {
 			ID = getNewID();
 			
+			var x = undefined;
+			var y = undefined
+			
+			if (ID == 1) {
+				x = $(document).width()/2;
+				y = $(document).height()/2;
+			}
+				
 			nodesTable.push(
 				{
-					'id': ID, 
-					'text': device.system_name + "\n" + device.ip_address, 
-					'style': 'rect', 
-					'group': 1
+					'id': ID,
+					'text': device.system_name + "\n" + device.ip_address,
+					'style': 'rect',
+					'group': 1,
+					'title': buildNodeDescription(device),
+					'value': device.children.length,
+					'x': x,
+					'y': y
 				});
-				
+			
 			if (parentID > 0) {
+				var line = device.remote_port + " --> " + device.local_port;
 				linksTable.push(
 				{
-					'from': ID, 
-					'to': parentID, 
-					'style': 'line', 
-					'color': undefined, 
-					'width': 2, 
-					'length': 222, 
-					'title': '12'
+					'from': parentID,
+					'to': ID,
+					'style': 'arrow-end',
+					'color': undefined,
+					'width': 2,
+					'length': (parentID == 1) ? 500 : 250,
+					'value': undefined,
+					'title': undefined,
+					'text': line
+					
 				});
 			}
 			
@@ -80,21 +96,57 @@
 			}
 		}
 		
-		// Generates a unique ID for the nodes
-		function getNewID() {
-			return uniqueID+=1;
+		// Builds node description when hovering
+		function buildNodeDescription(device) {
+			return (
+				"<b>" + device.system_name + "</b></br>" +
+				device.system_description + "</br>" +
+				"<b>" + device.ip_address_type.toUpperCase() + ":</b> " +
+				device.ip_address + "</br>" +
+				"<b>MAC:</b> " + device.mac_address + "</br>" +
+				"<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
+				"<b>Connected ports:</b></br>" + buildDeviceConnectedPorts(device)
+			)
+		}
+		
+		// Builds device connected ports list
+		function buildDeviceConnectedPorts(device) {
+			
+			var connectedPorts = "";
+			
+			if (device.local_port != null && device.remote_port != null) {
+				var line = device.local_port + " --> " + device.remote_port + "</br>";
+					
+				connectedPorts += line;
+			}
+			
+			for (var i = 0; i < device.children.length; i++) {
+				var children = device.children[i];
+				
+				var line = children.remote_port + " --> " + 
+					children.local_port + " (" + children.ip_address + ")</br>";
+					
+				connectedPorts += line;
+			}
+			
+			return connectedPorts; 
 		}
 		
 		// Handles the selection of the nodes
 		function onselect() {
 			var selection = network.getSelection();
 			
-			var info = 'selected row(s): '  
+			var info = 'selected row(s): '
 			for (var i = 0; i < selection.length; i++) {
 				info += selection[i].row + ' ';
 			}
 			
 			console.log('Selection: ' + JSON.stringify(selection));
+		}
+		
+		// Generates a unique ID for the nodes
+		function getNewID() {
+			return uniqueID+=1;
 		}
 		
 	</script>

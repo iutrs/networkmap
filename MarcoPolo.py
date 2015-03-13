@@ -1,5 +1,5 @@
-#!urs/bin/env python
-#encoding utf-8
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """
 Auteur	: Marc-Antoine Fortier
@@ -78,13 +78,13 @@ class NetworkDevice(object):
 		elif "PortType" in key:
 			pass # Do we need this information?
 		elif "PortId" in key:
-			self.local_port = value
+			pass # Do we need this information?
 		elif "SysName" in key:
 			self.system_name = value
 		elif "SystemDescr" in key:
 			self.system_description = value
 		elif "PortDescr" in key:
-			pass # Do we need this information?
+			self.local_port = value
 		elif "Pvid" in key:
 			pass # Often empty information
 		elif "SystemCapabilitiesSupported" in key:
@@ -170,17 +170,24 @@ class NetworkDevice(object):
 class NetworkDeviceBuilder(object):
 	def __init__():
 		pass
-	
+		
 	@staticmethod
 	def buildNetwordDevicesFromLLDPRemoteInformation(lldp_result):
-		"""Creates NetworkDevice objects from the LLDP remote device \
-		information detail of a Hewlett-Packard\xc2 switch"""
+		"""
+		Builds an array of NetworkDevice objects from the LLDP remote device \
+		information detail of a Hewlett-Packard\xc2 switch.
+		
+		:param lldp_result: The result of the command "show lldp info remote-device [port]"
+		:type lldp_result: string
+		:return: An array of the NetworkDevice objects built from the provided result
+		:rtype: NetworkDevice[]
+		"""
 		devices = []
-		currentDevice = NetworkDevice()
 		
 		try:
-			# Parsing "show lldp info remote-device [port]" command's result
-			for rawline in lldp_result.splitlines():	
+			currentDevice = NetworkDevice()
+			
+			for rawline in lldp_result.splitlines():
 				if ':' in rawline:
 					key, value = NetworkDeviceBuilder\
 						._extractKeyAndValueFromLine(rawline)
@@ -199,17 +206,23 @@ class NetworkDeviceBuilder(object):
 		
 	@staticmethod
 	def buildNetwordDeviceFromLLDPLocalInformation(lldp_result):
-		"""Creates a NetworkDevice object from the LLDP local device \
-		information detail of a Hewlett-Packard\xc2 switch"""
+		"""
+		Builds a NetworkDevice object from the LLDP local device \
+		information detail of a Hewlett-Packard\xc2 switch.
+		
+		:param lldp_result: The result of the command "show lldp info local-device"
+		:type lldp_result: string
+		:return: The NetworkDevice object built from the provided result
+		:rtype: NetworkDevice
+		"""
 		device = NetworkDevice()
+		
 		try:
-			# Parsing "show lldp info local-device" command's result
 			for rawline in lldp_result.splitlines():	
 				if ':' in rawline:
 					key, value = NetworkDeviceBuilder\
 						._extractKeyAndValueFromLine(rawline)
-#					print("Attributing key '{0}' and value '{1}'"
-#						.format(key, value))
+						
 					device.attributeLLDPLocalInformation(key, value)
 				
 		except Exception:
@@ -220,42 +233,57 @@ class NetworkDeviceBuilder(object):
 		
 	@staticmethod
 	def buildNetwordDevicesFromCDPInformation(cdp_result):
-		"""Creates NetworkDevice objects from the CDP neighbors detail \
-		information of a Hewlett-Packard\xc2 switch"""
+		"""
+		Builds an array of NetworkDevice objects from the CDP neighbors detail \
+		information of a Hewlett-Packard\xc2 switch.
+		
+		:param cdp_result: The result of the command "show cdp neighbors detail"
+		:type cdp_result: string
+		:return: An array of the NetworkDevice objects built from the provided result
+		:rtype: NetworkDevice[]
+		"""
 		devices = []
-		currentDevice = NetworkDevice()
 		
 		try:
-			# Parsing "show cdp neighbors detail" command's result
+			currentDevice = NetworkDevice()
+			
 			for rawline in cdp_result.splitlines():	
 				line = rawline.rstrip()
 				if ':' in line:
 					key, value = NetworkDeviceBuilder\
 						._extractKeyAndValueFromLine(line)
-					
+					#print("Attributing key '{0}' and value '{1}'"
+					#	.format(key, value))
 					currentDevice.attributeCDPInformation(key, value)
 				elif '-----' in line:
 					devices.append(currentDevice)
 					currentDevice = NetworkDevice()
-		
+				
+			# Not forgetting the last device since it's not followed by a dotted line ('-----')
+			devices.append(currentDevice)
+			
 		except Exception as e:
 			print("Could not build network devices: '{0}'."
 				.format(e))
-	
-		# Not forgetting the last device since it's not followed by a dotted line ('-----')	
-		devices.append(currentDevice)
-			
+				
 		return devices
 	
 	@staticmethod
 	def extractLocalPortsFromLLDPRemoteInformation(lldp_result):
+		"""
+		Builds an array containing the connected LLDP ports of a Hewlett-Packard\xc2 switch.
+		
+		:param lldp_result: The result of the command "show lldp info remote-device"
+		:type lldp_result: string
+		:return: An array of the of the connected ports built from the provided result
+		:rtype: str[]
+		"""
 		local_ports = []
-		try:	
-			# Parsing ports from "show lldp info remote-device" command's result
+		
+		try:
 			for rawline in lldp_result.splitlines():	
-				line = rawline.rstrip()
-				if '|' in line:
-					tokens = line.split()
+				if '|' in rawline:
+					tokens = rawline.split()
 					port = tokens[:tokens.index('|')][-1]
 					
 					if port != 'LocalPort' and NetworkDeviceBuilder\
@@ -276,11 +304,10 @@ class NetworkDeviceBuilder(object):
 			if target != "" and "..." not in target:
 				system_name = target
 		except Exception as e:
-			print("Could not extract system name from '{0}'."
-				.format(line))
+			print("Could not extract system name from '{0}'.".format(line))
 		
 		return system_name
-
+	
 	@staticmethod
 	def _extractKeyAndValueFromLine(line):
 		tokens = line.split(':')
@@ -320,8 +347,17 @@ class NetworkExplorer(object):
 			print("Unexpected error: {0}".format(e))
 	
 	def explore_cdp(self, origin, explored_devices):
-		"""Recursively explores all neighbors of a Hewlett-Packard\xc2 switch 
-		using the CDP protocol."""
+		"""
+		Recursively explores all neighbors of a Hewlett-Packard\xc2 switch 
+		using the CDP protocol.
+		
+		:param origin: The NetworkDevice starting point"
+		:type origin: NetworkDevice
+		:param explored_devices: The list of the mac addresses already explored
+		:type origin: str[]
+		:return: Returns the origin and the list of explored devices
+		:rtype: NetworkDevice, str[]
+		"""
 		self._open_ssh_connection(origin.ip_address)
 		
 		if not explored_devices:
@@ -353,8 +389,17 @@ class NetworkExplorer(object):
 		return origin, explored_devices
 	
 	def explore_lldp(self, origin, explored_devices):
-		"""Recursively explores all neighbors of a Hewlett-Packard\xc2 switch 
-		using the LLDP protocol."""
+		"""
+		Recursively explores all neighbors of a Hewlett-Packard\xc2 switch 
+		using the LLDP protocol.
+		
+		:param origin: The NetworkDevice starting point"
+		:type origin: NetworkDevice
+		:param explored_devices: The list of the mac addresses already explored
+		:type origin: str[]
+		:return: Returns the origin and the list of explored devices
+		:rtype: NetworkDevice, str[]
+		"""
 		self._open_ssh_connection(origin.ip_address)
 		
 		if not explored_devices:
@@ -444,10 +489,19 @@ class NetworkExplorer(object):
 			print("Could not close ssh connection.")
 	
 	def _send_ssh_command(self, command, prepare):
-		"""Opens a SSH connection using paramiko with a Hewlett-Packard\xc2 \
-		switch in order to retrieve the output data."""
+		"""
+		Opens a SSH connection using paramiko with a Hewlett-Packard\xc2 \
+		switch in order to retrieve the output data.
 		
-		result = None	
+		:param command: The command to execute on the device (ending by a '\\n')
+		:type command: str
+		:param prepare: Preparing the switch before the command
+		:type prepare: bool
+		:return: Returns the result from the command's output
+		:rtype: str
+		"""
+		result = None
+		
 		try:
 			# These 'time.sleep()' are used to give enough time for the switch to operate
 			if prepare:
@@ -480,12 +534,12 @@ def _parseargs():
 	parser = argparse.ArgumentParser(
 		description="This program dynamically generates documentation for \
 		the topology of a computing network by exploring every connected \
-		switch using the CDP protocol.")
+		switch using the LLDP or CDP protocol.")
 	parser.add_argument("config", help="The configuration file.", type=str)
+	
 	return parser.parse_args()
-	
-if __name__ == "__main__":
-	
+
+def main():
 	args = _parseargs()
 	config_file = args.config
 	
@@ -528,5 +582,8 @@ if __name__ == "__main__":
 			print("Unexpected error. {0}".format(e))
 	else:
 		print("Could not find configuration file '{0}'.".format(config_file))
-		
-		
+
+if __name__ == "__main__":
+	main()
+	
+	

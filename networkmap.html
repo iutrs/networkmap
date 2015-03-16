@@ -6,7 +6,7 @@
 	<!-- Adapting the view for mobile devices --> 
 	<meta name="viewport" content="target-densitydpi=device-dpi, width=device-width" />
 
-	<script type="text/javascript" src="./js/network-min.js"></script>
+	<script type="text/javascript" src="./js/network-modified-min.js"></script>
 	<script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
 	<script type="text/javascript">
@@ -75,18 +75,18 @@
 				});
 			
 			if (parentID > 0) {
-				var line = device.remote_port + " --> " + device.local_port;
 				linksTable.push(
 				{
 					'from': parentID,
 					'to': ID,
-					'style': 'arrow-end',
+					'style': 'line',
 					'color': undefined,
 					'width': 2,
 					'length': (parentID == 1) ? 500 : 250,
 					'value': undefined,
 					'title': undefined,
-					'text': line
+					'textTo': device.remote_port,
+					'textFrom': device.local_port
 					
 				});
 			}
@@ -109,7 +109,7 @@
 			)
 		}
 		
-		// Builds device connected ports list
+		// Builds device's connected ports list
 		function buildDeviceConnectedPorts(device) {
 			
 			var connectedPorts = "";

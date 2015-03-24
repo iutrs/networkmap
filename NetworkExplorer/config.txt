@@ -1,0 +1,11 @@
+[DEFAULT]
+Protocol = LLDP
+SourceAddress = ?
+OutputFile = ?
+Ignore =
+
+[SSH]
+Timeout = 10
+MaximumBytesToReceive = 1024
+Username = ?
+Password = ?

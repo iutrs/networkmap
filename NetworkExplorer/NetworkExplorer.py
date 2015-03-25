@@ -95,20 +95,26 @@ class NetworkDeviceExplorer(object):
                   .format(device.system_name))
 
             interfaces = self._get_lldp_interfaces()
+
+            vlans_list = self._get_vlans()
+
+            self._assign_vlans_to_interfaces(interfaces, vlans_list)
+
             device.interfaces = interfaces
 
-            neighbors = self._get_lldp_neighbors(interfaces)
+            print(device.to_JSON())
+            #neighbors = self._get_lldp_neighbors(interfaces)
 
             self._close_ssh_connection()
 
-            for neighbor in neighbors:
-                if neighbor.is_valid_lldp_device() and \
-                   neighbor.mac_address not in explored_devices:
-                        explored_devices[neighbor.mac_address] = neighbor
+#            for neighbor in neighbors:
+#                if neighbor.is_valid_lldp_device() and \
+#                   neighbor.mac_address not in explored_devices:
+#                        explored_devices[neighbor.mac_address] = neighbor
 
-                        if not self._ignore(neighbor.ip_address) and \
-                           not self._ignore(neighbor.system_name):
-                            queue.put(neighbor.system_name)
+#                        if not self._ignore(neighbor.ip_address) and \
+#                           not self._ignore(neighbor.system_name):
+#                            queue.put(neighbor.system_name)
 
             explored_devices[device.mac_address] = device
 
@@ -136,11 +142,29 @@ class NetworkDeviceExplorer(object):
                 command = cmd.format(interface.local_port)
 
                 result = self._send_ssh_command(command, False)
+
                 if result is not None:
                     devices_details += result
 
         return self.device_builder\
             .build_devices_from_lldp_remote_info(devices_details)
+
+    def _get_vlans(self):
+        command = self.device_builder.vlans_global_cmd
+        result = self._send_ssh_command(command, False)
+
+        return self.device_builder.build_vlans_from_global_info(result)
+
+    def _assign_vlans_to_interfaces(self, interfaces, vlans):
+        for vlan in vlans:
+            cmd = self.device_builder.vlans_specific_cmd
+            command = cmd.format(vlan.identifier)
+
+            specific_result = self._send_ssh_command(command, False)
+
+            if specific_result is not None:
+                self.device_builder.asociate_vlan_with_interfaces(
+                    interfaces, vlan, specific_result)
 
     def _open_ssh_connection(self):
         success = False

@@ -13,13 +13,13 @@ supported_types = ["bridge", "Bridge"]
 
 
 class VlanMode():
-    TAGGED = "Trunk"
-    UNTAGGED = "Access"
+    TRUNK = "Tagged"
+    ACCESS = "Untagged"
 
 
 class VlanStatus():
-    UP = "Active"
-    DOWN = "Inactive"
+    ACTIVE = "Up"
+    INACTIVE = "Down"
 
 
 class Vlan(object):
@@ -35,6 +35,9 @@ class Vlan(object):
         self.mode = mode
         self.status = status
 
+    def to_JSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__,
+                          sort_keys=False, indent=4)
 
 class NetworkDeviceInterface(object):
     def __init__(
@@ -58,6 +61,9 @@ class NetworkDeviceInterface(object):
                 self.remote_system_name != ""
             )
 
+    def to_JSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__,
+                          sort_keys=False, indent=4)
 
 class NetworkDevice(object):
     def __init__(
@@ -78,12 +84,6 @@ class NetworkDevice(object):
         self.supported_capabilities = supported_capabilities
         self.enabled_capabilities = enabled_capabilities
         self.interfaces = []
-
-    def attribute_lldp_remote_info(self, key, value):
-        raise NotImplementedError()
-
-    def attribute_lldp_local_info(self, key, value):
-        raise NotImplementedError()
 
     def is_valid_lldp_device(self):
         return \

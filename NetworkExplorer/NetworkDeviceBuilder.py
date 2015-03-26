@@ -13,30 +13,6 @@ class NetworkDeviceBuilder(object):
     def __init__(self):
         raise NotImplementedError()
 
-    def build_devices_from_lldp_remote_info(self, lldp_result):
-        raise NotImplementedError()
-
-    def build_device_from_lldp_local_info(self, lldp_result):
-        raise NotImplementedError()
-
-    def build_interfaces_from_lldp_remote_info(self, lldp_result):
-        raise NotImplementedError()
-
-    def build_interface_from_line(self, line):
-        raise NotImplementedError()
-
-    def build_vlans_from_global_info(self, global_result):
-        raise NotImplementedError()
-
-    def build_vlan_from_specific_info(self, specific_result):
-        raise NotImplementedError()
-
-    def attribute_lldp_remote_info(self, key, value):
-        raise NotImplementedError()
-
-    def attribute_lldp_local_info(self, key, value):
-        raise NotImplementedError()
-
     @staticmethod
     def get_builder_type(result):
         for rawline in result.splitlines():
@@ -49,6 +25,15 @@ class NetworkDeviceBuilder(object):
                 return None
 
         print("Could not get builder type: ", result)
+
+    @staticmethod
+    def assign_vlan_to_interface(vlan, interface):
+        #Add the vlan to the interface if it doesnt already exists
+        for v in interface.vlans:
+            if v.identifier == vlan.identifier:
+                return
+
+        interface.vlans.append(vlan)
 
     @staticmethod
     def extract_key_and_value_from_line(line):
@@ -66,7 +51,8 @@ class NetworkDeviceBuilder(object):
             .replace("[2K", "")\
             .replace(u"\u001b", "")\
             .replace("[?25h", "")\
-            .replace("[24;19H", "")
+            .replace("[24;19H", "")\
+            .replace("[24;13H", "")
 
 
 class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
@@ -84,9 +70,9 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
 
         try:
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
                 if ':' in rawline:
-                    key, value = self.extract_key_and_value_from_line(line)
+                    key, value = self._extract_key_and_value_from_line(line)
 
                     self.attribute_lldp_local_info(device, key, value)
 
@@ -107,9 +93,9 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
             device = NetworkDevice()
 
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
                 if ':' in rawline:
-                    key, value = self.extract_key_and_value_from_line(line)
+                    key, value = self._extract_key_and_value_from_line(line)
 
                     self.attribute_lldp_remote_info(device, key, value)
 
@@ -128,7 +114,7 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
 
         try:
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
                 if len(line) > 57 and line[12] == '|':
                     interface = self.build_interface_from_line(line)
                     if interface.local_port != 'LocalPort':
@@ -155,43 +141,39 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
         vlans = []
 
         try:
+            targets = ["Name", "Status"]
             name_index = None
             status_index = None
 
             for rawline in global_result.splitlines():
-                line = self.clean(rawline)
-
-                targets = ["Name", "Status"]
+                line = self._clean(rawline)
 
                 if all(t in line for t in targets):
                     name_index = line.find(targets[0])
                     status_index = line.find(targets[1])
+                elif "----" not in line and \
+                     name_index is not None and status_index is not None:
 
-                elif name_index is not None and status_index is not None and \
-                    "----" not in line:
+                    if line.strip() != "" and not self.wait_string in line:
+                        vlan_id = line[:name_index-1].strip()
+                        vlan_name = line[name_index:status_index-1][:-1].strip()
 
-                    if line.strip() == "":
-                        break
-
-                    vlan_id = line[:name_index-1].strip()
-                    vlan_name = line[name_index:status_index-1][:-1].strip()
-
-                    vlan = Vlan(identifier=vlan_id, name=vlan_name)
-                    vlans.append(vlan)
+                        vlan = Vlan(identifier=vlan_id, name=vlan_name)
+                        vlans.append(vlan)
 
         except Exception as e:
             print("Could not extract vlans from '{0}'.".format(global_result))
 
         return vlans
 
-    def asociate_vlan_with_interfaces(self, interfaces, vlan, specific_result):
+    def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
         try:
             mode_index = None
             unknown_index = None
             status_index = None
 
             for rawline in specific_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
 
                 targets = ["Mode", "Unknown VLAN", "Status"]
 
@@ -200,40 +182,28 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
                     unknown_index = line.find(targets[1])
                     status_index = line.find(targets[2])
 
-                elif mode_index is not None and unknown_index is not None and \
-                   status_index is not None and "----" not in line:
+                elif "----" not in line and mode_index is not None and \
+                     unknown_index is not None and status_index is not None:
 
-                    if line.strip() == "":
-                        break
+                    if line.strip() != "" and not self.wait_string in line:
+                        interface_id = line[:mode_index-1].strip()
+                        vlan_mode = line[mode_index:unknown_index-1].strip()
+                        vlan_status = line[status_index:].strip()
 
-                    interface_id = line[:mode_index-1].strip()
-                    vlan_mode = line[mode_index:unknown_index-1].strip()
-                    vlan_status = line[status_index:].strip()
+                        vlan = Vlan(identifier=vlan.identifier,
+                                    name=vlan.name,
+                                    mode=vlan_mode,
+                                    status=vlan_status)
 
-                    vlan = Vlan\
-                    (
-                        identifier = vlan.identifier,
-                        name = vlan.name,
-                        mode = vlan_mode,
-                        status = vlan_status
-                    )
-
-                    for interface in interfaces:
-                        if interface.local_port == interface_id:
-                            self._assign_vlan_to_interface(vlan, interface)
+                        for interface in interfaces:
+                            if interface.local_port == interface_id:
+                                self._assign_vlan_to_interface(vlan, interface)
 
         except Exception as e:
-            print("Could not extract vlans from '{0}'."
-                  .format(specific_result))
+            print("Could not extract vlans from '{0}'. {1}"
+                  .format(specific_result, e))
 
         return vlan
-
-    def _assign_vlan_to_interface(self, vlan, interface):
-        for v in interface.vlans:
-            if v.identifier == vlan.identifier:
-                return
-
-        interface.vlans.append(vlan)
 
     def attribute_lldp_remote_info(self, device, key, value):
         if "ChassisId" in key:
@@ -271,10 +241,13 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
         else:
             pass
 
-    def extract_key_and_value_from_line(self, line):
+    def _assign_vlan_to_interface(self, vlan, interface):
+        return NetworkDeviceBuilder.assign_vlan_to_interface(vlan, interface)
+
+    def _extract_key_and_value_from_line(self, line):
         return NetworkDeviceBuilder.extract_key_and_value_from_line(line)
 
-    def clean(self, string):
+    def _clean(self, string):
         return NetworkDeviceBuilder.clean(string)
 
 
@@ -286,15 +259,16 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
         self.lldp_local_cmd = "show lldp local-information\n"
         self.lldp_neighbors_cmd = "show lldp neighbors\n"
         self.lldp_neighbors_detail_cmd = "show lldp neighbors interface {0}\n"
+        self.vlans_global_cmd = "show vlans detail\n"
 
     def build_device_from_lldp_local_info(self, lldp_result):
         device = NetworkDevice()
 
         try:
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
                 if ':' in rawline:
-                    key, value = self.extract_key_and_value_from_line(line)
+                    key, value = self._extract_key_and_value_from_line(line)
 
                     self.attribute_lldp_local_info(device, key, value)
 
@@ -321,14 +295,14 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
             device = NetworkDevice()
 
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
 
                 if "Neighbour Information" in line:
                     skip_line = False
 
                 if not skip_line:
                     if ':' in line:
-                        key, value = self.extract_key_and_value_from_line(line)
+                        key, value = self._extract_key_and_value_from_line(line)
 
                         self.attribute_lldp_remote_info(device, key, value)
 
@@ -348,14 +322,14 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
 
         try:
             for rawline in lldp_result.splitlines():
-                line = self.clean(rawline)
+                line = self._clean(rawline)
                 if len(line) > 73:
                     interface = self.build_interface_from_line(line)
                     if interface.local_port != "Local Interface":
                         interfaces.append(interface)
         except Exception as e:
-            print("Could not extract interfaces from '{0}'."
-                  .format(lldp_result))
+            print("Could not extract interfaces from '{0}'. {1}"
+                  .format(lldp_result, e))
 
         return interfaces
 
@@ -371,11 +345,49 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
                                       remote_mac_address=chassis_id,
                                       remote_system_name=sys_name)
 
-    def build_vlans_from_global_info(self, global_result):
-        raise NotImplementedError()
+    def associate_vlans_to_interfaces(self, interfaces, result):
+        try:
+            vlan = Vlan()
 
-    def build_vlan_from_specific_info(self, specific_result):
-        raise NotImplementedError()
+            for rawline in result.splitlines():
+                line = self._clean(rawline)
+
+                targets = ["VLAN: ", "Tag: "]
+
+                if all(t in line for t in targets):
+                    tokens = line.split(',')
+                    vlan_name = tokens[0].split(targets[0])[1]
+                    vlan_tag = tokens[1].split(targets[1])[1]
+
+                    vlan.name = vlan_name
+                    vlan.identifier = vlan_tag
+
+                elif "agged interfaces:" in line:
+
+                    vlan.mode = VlanMode.TRUNK
+                    if "Untagged" in line:
+                        vlan.mode = VlanMode.ACCESS
+
+                    start_index = line.find(':') + 1
+                    ports = line[start_index:].replace(' ', '').split(',')
+
+                    if "None" not in line:
+                        for p in ports:
+                            if p[-1:] == '*':
+                                p = p[:-1]
+                                vlan.status = VlanStatus.ACTIVE
+                            else:
+                                vlan.status = VlanStatus.INACTIVE
+
+                        for interface in interfaces:
+                            if interface.local_port == p:
+                                self._assign_vlan_to_interface(vlan, interface)
+
+                    if "Tagged" in line:
+                        vlan = Vlan()
+
+        except Exception as e:
+            print("Could not extract vlans from '{0}'. {1}".format(result, e))
 
     def attribute_lldp_remote_info(self, device, key, value):
         if "Chassis ID" in key:
@@ -414,8 +426,11 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
             pass
             #print("Unexpected key '{0}'.".format(key))
 
-    def extract_key_and_value_from_line(self, line):
+    def _assign_vlan_to_interface(self, vlan, interface):
+        return NetworkDeviceBuilder.assign_vlan_to_interface(vlan, interface)
+
+    def _extract_key_and_value_from_line(self, line):
         return NetworkDeviceBuilder.extract_key_and_value_from_line(line)
 
-    def clean(self, string):
+    def _clean(self, string):
         return NetworkDeviceBuilder.clean(string)

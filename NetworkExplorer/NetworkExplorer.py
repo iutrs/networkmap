@@ -96,25 +96,22 @@ class NetworkDeviceExplorer(object):
 
             interfaces = self._get_lldp_interfaces()
 
-            vlans_list = self._get_vlans()
-
-            self._assign_vlans_to_interfaces(interfaces, vlans_list)
+            #self._assign_vlans_to_interfaces(interfaces)
 
             device.interfaces = interfaces
 
-            print(device.to_JSON())
-            #neighbors = self._get_lldp_neighbors(interfaces)
+            neighbors = self._get_lldp_neighbors(interfaces)
 
             self._close_ssh_connection()
 
-#            for neighbor in neighbors:
-#                if neighbor.is_valid_lldp_device() and \
-#                   neighbor.mac_address not in explored_devices:
-#                        explored_devices[neighbor.mac_address] = neighbor
+            for neighbor in neighbors:
+                if neighbor.is_valid_lldp_device() and \
+                   neighbor.mac_address not in explored_devices:
+                        explored_devices[neighbor.mac_address] = neighbor
 
-#                        if not self._ignore(neighbor.ip_address) and \
-#                           not self._ignore(neighbor.system_name):
-#                            queue.put(neighbor.system_name)
+                        if not self._ignore(neighbor.ip_address) and \
+                           not self._ignore(neighbor.system_name):
+                            queue.put(neighbor.system_name)
 
             explored_devices[device.mac_address] = device
 
@@ -149,22 +146,32 @@ class NetworkDeviceExplorer(object):
         return self.device_builder\
             .build_devices_from_lldp_remote_info(devices_details)
 
+    def _assign_vlans_to_interfaces(self, interfaces):
+        if isinstance(self.device_builder, HPNetworkDeviceBuilder):
+            for vlan in self._get_vlans():
+                cmd = self.device_builder.vlans_specific_cmd
+                command = cmd.format(vlan.identifier)
+
+                specific_result = self._send_ssh_command(command, False)
+
+                if specific_result is not None:
+                    self.device_builder.associate_vlan_to_interfaces(
+                        interfaces, vlan, specific_result)
+
+        elif isinstance(self.device_builder, JuniperNetworkDeviceBuilder):
+            command = self.device_builder.vlans_global_cmd
+
+            result = self._send_ssh_command(command, False)
+
+            if result is not None:
+                self.device_builder.associate_vlans_to_interfaces(
+                    interfaces, result)
+
     def _get_vlans(self):
         command = self.device_builder.vlans_global_cmd
         result = self._send_ssh_command(command, False)
 
         return self.device_builder.build_vlans_from_global_info(result)
-
-    def _assign_vlans_to_interfaces(self, interfaces, vlans):
-        for vlan in vlans:
-            cmd = self.device_builder.vlans_specific_cmd
-            command = cmd.format(vlan.identifier)
-
-            specific_result = self._send_ssh_command(command, False)
-
-            if specific_result is not None:
-                self.device_builder.asociate_vlan_with_interfaces(
-                    interfaces, vlan, specific_result)
 
     def _open_ssh_connection(self):
         success = False
@@ -244,7 +251,7 @@ class NetworkDeviceExplorer(object):
 
     def _ignore(self, ip_address):
         for ip in self.ignore_list:
-            if ip_address and ip_address.startswith(ip):
+            if ip_address and ip_address.lower().startswith(ip.lower()):
                 return True
 
 
@@ -310,9 +317,12 @@ def main():
         if len(explored_devices) > 0:
             _file = open(outputfile, "w")
 
+            output = "["
             for key, device in explored_devices.items():
-                _file.write("{0}\n".format(device.to_JSON()))
+                output += "{0},\n".format(device.to_JSON())
+            output = output[:-2] + "]"
 
+            _file.write(output)
             _file.close()
 
             print("Found {0} device(s) in {1} second(s).".format(

@@ -96,7 +96,7 @@ class NetworkDeviceExplorer(object):
 
             interfaces = self._get_lldp_interfaces()
 
-            #self._assign_vlans_to_interfaces(interfaces)
+            self._assign_vlans_to_interfaces(interfaces)
 
             device.interfaces = interfaces
 

@@ -3,16 +3,22 @@
 <head>
     <title>networkmap</title>
 
-    <!-- Adapting the view for mobile devices --> 
+    <!-- Adapting the view for mobile devices -->
     <meta name="viewport" content="target-densitydpi=device-dpi, width=device-width" />
 
     <script type="text/javascript" src="./js/network-modified-min.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
     <script type="text/javascript">
-
+        var uniqueID = 0;
+        
         var jsonFile = "devices.json"
         var devices = null;
+
+        // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
+        $.ajaxSetup({
+            async: false
+        });
         
         $.getJSON(jsonFile, function(json) {
             devices = json;
@@ -22,17 +28,18 @@
         var linksTable = null;
         var network = null;
         
-        var objects = []
-        var connections = []
-
         // Draws the network map from the devices
         function draw() {
             
             nodesTable = [];
             linksTable = [];
             
-            createNodes(nodesTable, objects)
-            createLinks(linksTable, connections)
+            // Temporary alert
+            if (devices == null) {
+                alert("Could not find '" + jsonFile + "'.")
+            }
+            
+            buildGraph(devices, nodesTable, linksTable, undefined, undefined)
             
             network = new links.Network(document.getElementById('networkmap'));
             
@@ -48,67 +55,52 @@
             network.draw(nodesTable, linksTable, options);
         }
         
-        function createNodes(nodesTable, objects) {
-            for (var d = 0; d < devices.length; d++) {
-                device = devices[d]
-                nodesTable.push(
+        // Iterates through the devices to add the nodes and the links
+        function buildGraph(device, nodesTable, linksTable, ID, parentID) {
+            ID = getNewID();
+            
+            var x = undefined;
+            var y = undefined
+            
+            if (ID == 1) {
+                x = $(document).width()/2;
+                y = $(document).height()/2;
+            }
+                
+            nodesTable.push(
                 {
-                    'id': device.mac_address,
+                    'id': ID,
                     'text': device.system_name + "\n" + device.ip_address,
                     'style': 'rect',
                     'group': 1,
-                    'title': "",
-                    'value': device.interfaces.length,
+                    'title': buildNodeDescription(device),
+                    'value': device.children.length,
+                    'x': x,
+                    'y': y
                 });
-                objects.push(device.mac_address)
+            
+            if (parentID > 0) {
+                linksTable.push(
+                {
+                    'from': parentID,
+                    'to': ID,
+                    'style': 'line',
+                    'color': undefined,
+                    'width': 2,
+                    'length': (parentID == 1) ? 500 : 250,
+                    'value': undefined,
+                    'title': undefined,
+                    'textTo': device.remote_port,
+                    'textFrom': device.local_port
+                    
+                });
+            }
+            
+            for (var i = 0; i < device.children.length; i++) {
+                buildGraph(device.children[i], nodesTable, linksTable, ID+i+1, ID);
             }
         }
         
-        function createLinks(linksTable, connections) {
-            for (var d = 0; d < devices.length; d++) {
-                device = devices[d]
-
-                for (var i = 0; i < device.interfaces.length; i++) {
-                    int = device.interfaces[i]
-
-                    if (objects.indexOf(int.remote_mac_address) > -1) { 
-                        connection = [device.mac_address, int.remote_mac_address]
-
-                        if (!exists(connection)) {
-                            linksTable.push(
-                                {
-                                    'from': connection[0],
-                                    'to': connection[1],
-                                    'style': 'line',
-                                    'color': undefined,
-                                    'width': 2,
-                                    'length' : 500,
-                                    'value': undefined,
-                                    'title': undefined,
-                                    'textTo': int.local_port,
-                                    'textFrom': int.remote_port
-                                
-                                });
-                            connections.push(connection)
-                        }
-                    }
-                }
-            }
-        }
-        
-        function exists(connection) {
-            for (var i = 0; i < connections.length; i++) {
-                from = connections[i][0]
-                to = connections[i][1]
-                console.log(from, to)
-                console.log(connection)
-                if ((from == connection[0] && to == connection[1]) ||
-                    (from == connection[1] && to == connection[0])) {
-                    return true
-                }
-            }
-        }
-
         // Builds node description when hovering
         function buildNodeDescription(device) {
             return (
@@ -157,8 +149,12 @@
             console.log('Selection: ' + JSON.stringify(selection));
         }
         
+        // Generates a unique ID for the nodes
+        function getNewID() {
+            return uniqueID+=1;
+        }
+        
     </script>
-    
 </head>
 
 <body onload="draw();" onresize="network.redraw();">

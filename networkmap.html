@@ -1,160 +1,137 @@
+<!doctype html>
 <html>
-
 <head>
     <title>networkmap</title>
 
     <!-- Adapting the view for mobile devices -->
     <meta name="viewport" content="target-densitydpi=device-dpi, width=device-width" />
 
-    <script type="text/javascript" src="./js/network-modified-min.js"></script>
+    <script type="text/javascript" src="./js/vis.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
+  <style type="text/css">
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
+
+    #networkmap {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
     <script type="text/javascript">
-        var uniqueID = 0;
-        
         var jsonFile = "devices.json"
         var devices = null;
-
+        
         // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
         $.ajaxSetup({
             async: false
         });
-        
+
         $.getJSON(jsonFile, function(json) {
             devices = json;
         });
-        
-        var nodesTable = null;
-        var linksTable = null;
-        var network = null;
-        
-        // Draws the network map from the devices
+
+        // Arrays used by vis to generate the network graph
+        var visNodes = []
+        var visEdges = []
+
+        // Arrays used to keep information in memory
+        var myNodes = []
+        var myEdges = []
+
         function draw() {
-            
-            nodesTable = [];
-            linksTable = [];
-            
-            // Temporary alert
-            if (devices == null) {
-                alert("Could not find '" + jsonFile + "'.")
-            }
-            
-            buildGraph(devices, nodesTable, linksTable, undefined, undefined)
-            
-            network = new links.Network(document.getElementById('networkmap'));
-            
-            links.events.addListener(network, 'select', onselect);
-            
+
+            createNodes();
+            createEdges();
+
+            var container = document.getElementById('networkmap');
+            var data = {nodes: visNodes, edges: visEdges};
             var options = {
-                width:  '100%',
-                height: '100%',
                 stabilize: true,
-                selectable: true
+                selectable: true,
+                //configurePhysics:true,
+                physics: {
+                    repulsion: {
+                        nodeDistance: 75,
+                        springLength: 150,
+                        damping: 0.3
+                    }
+                },
+                smoothCurves: false
             };
-            
-            network.draw(nodesTable, linksTable, options);
+
+            var network = new vis.Network(container, data, options);
         }
-        
-        // Iterates through the devices to add the nodes and the links
-        function buildGraph(device, nodesTable, linksTable, ID, parentID) {
-            ID = getNewID();
-            
-            var x = undefined;
-            var y = undefined
-            
-            if (ID == 1) {
-                x = $(document).width()/2;
-                y = $(document).height()/2;
-            }
-                
-            nodesTable.push(
+
+        function createNodes() {
+            for (var d = 0; d < devices.length; d++) {
+                device = devices[d]
+
+                color = '#2B7CE9';
+                if (device.interfaces.length == 0) {
+                    color = '#C5000B';
+                }
+
+                visNodes.push(
                 {
-                    'id': ID,
-                    'text': device.system_name + "\n" + device.ip_address,
-                    'style': 'rect',
-                    'group': 1,
-                    'title': buildNodeDescription(device),
-                    'value': device.children.length,
-                    'x': x,
-                    'y': y
+                    'id': device.mac_address,
+                    'label': device.system_name + "\n" + device.ip_address,
+                    'shape': 'square',
+                    'color': color,
+                    'title': "",
+                    'mass': device.interfaces.length + 1
                 });
-            
-            if (parentID > 0) {
-                linksTable.push(
-                {
-                    'from': parentID,
-                    'to': ID,
-                    'style': 'line',
-                    'color': undefined,
-                    'width': 2,
-                    'length': (parentID == 1) ? 500 : 250,
-                    'value': undefined,
-                    'title': undefined,
-                    'textTo': device.remote_port,
-                    'textFrom': device.local_port
-                    
-                });
-            }
-            
-            for (var i = 0; i < device.children.length; i++) {
-                buildGraph(device.children[i], nodesTable, linksTable, ID+i+1, ID);
+
+                myNodes.push(device.mac_address)
             }
         }
-        
-        // Builds node description when hovering
-        function buildNodeDescription(device) {
-            return (
-                "<b>" + device.system_name + "</b></br>" +
-                device.system_description + "</br>" +
-                "<b>" + device.ip_address_type.toUpperCase() + ":</b> " +
-                device.ip_address + "</br>" +
-                "<b>MAC:</b> " + device.mac_address + "</br>" +
-                "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
-                "<b>Connected ports:</b></br>" + buildDeviceConnectedPorts(device)
-            )
-        }
-        
-        // Builds device's connected ports list
-        function buildDeviceConnectedPorts(device) {
-            
-            var connectedPorts = "";
-            
-            if (device.local_port != null && device.remote_port != null) {
-                var line = device.local_port + " --> " + device.remote_port + "</br>";
-                    
-                connectedPorts += line;
+
+        function createEdges() {
+            for (var d = 0; d < devices.length; d++) {
+                device = devices[d]
+
+                for (var i = 0; i < device.interfaces.length; i++) {
+                    int = device.interfaces[i]
+                    link = [device.mac_address, int.remote_mac_address]
+
+                    if (myNodes.indexOf(int.remote_mac_address) > -1 && !exists(link)) {
+                        visEdges.push(
+                            {
+                                'from': link[0],
+                                'to': link[1],
+                                'style': 'line',
+                                'color': undefined,
+                                'width': 2,
+                                'length' : 500,
+                                'value': undefined,
+                                'title': undefined,
+                                'textTo': int.local_port,
+                                'textFrom': int.remote_port
+                            
+                            });
+
+                        myEdges.push(link)
+                    }
+                }
             }
-            
-            for (var i = 0; i < device.children.length; i++) {
-                var children = device.children[i];
-                
-                var line = children.remote_port + " --> " + 
-                    children.local_port + " (" + children.ip_address + ")</br>";
-                    
-                connectedPorts += line;
+
+        }
+
+        function exists(link) {
+            for (var e = 0; e < myEdges.length; e++) {
+                from = myEdges[e][0]
+                to = myEdges[e][1]
+                if ((from == link[0] && to == link[1]) ||
+                    (from == link[1] && to == link[0])) {
+                    return true
+                }
             }
-            
-            return connectedPorts; 
         }
-        
-        // Handles the selection of the nodes
-        function onselect() {
-            var selection = network.getSelection();
-            
-            var info = 'selected row(s): '
-            for (var i = 0; i < selection.length; i++) {
-                info += selection[i].row + ' ';
-            }
-            
-            console.log('Selection: ' + JSON.stringify(selection));
-        }
-        
-        // Generates a unique ID for the nodes
-        function getNewID() {
-            return uniqueID+=1;
-        }
-        
     </script>
+
 </head>
 
 <body onload="draw();" onresize="network.redraw();">

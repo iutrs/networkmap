@@ -87,7 +87,7 @@ class NetworkDeviceExplorer(object):
             #Building device from local information
             device = self._get_lldp_local_device()
 
-            if device is None:
+            if device is None or device.mac_address is None:
                 print("Could not build device {0}.".format(self.hostname))
                 return
 

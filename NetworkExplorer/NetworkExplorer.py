@@ -18,7 +18,7 @@ import paramiko
 
 from multiprocessing import Process, Manager, Queue
 
-from NetworkDeviceBuilder import *
+from NetworkParser import *
 
 DEFAULT_MAX_BYTES = 2048*2048
 DEFAULT_TIMEOUT = 10
@@ -33,7 +33,7 @@ class NetworkDeviceExplorer(object):
 
         self.hostname = hostname
 
-        self.device_builder = None
+        self.network_parser = None
 
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -76,10 +76,10 @@ class NetworkDeviceExplorer(object):
             #Determining the type of the current device from the switch prompt
             switch_prompt = self._receive_ssh_output()
 
-            self.device_builder = NetworkDeviceBuilder.get_builder_type(
+            self.network_parser = NetworkParser.get_builder_type(
                 switch_prompt)
 
-            if self.device_builder is None:
+            if self.network_parser is None:
                 print("Could not recognize device {0}.".format(self.hostname))
                 print("Here is the switch prompt: {0}".format(switch_prompt))
                 return
@@ -116,17 +116,17 @@ class NetworkDeviceExplorer(object):
             explored_devices[device.mac_address] = device
 
     def _get_lldp_local_device(self):
-        command = self.device_builder.lldp_local_cmd
+        command = self.network_parser.lldp_local_cmd
         device_info = self._send_ssh_command(command, True)
 
-        return self.device_builder.build_device_from_lldp_local_info(
+        return self.network_parser.build_device_from_lldp_local_info(
             device_info)
 
     def _get_lldp_interfaces(self):
-        command = self.device_builder.lldp_neighbors_cmd
+        command = self.network_parser.lldp_neighbors_cmd
         remote_devices_list = self._send_ssh_command(command, False)
 
-        return self.device_builder.build_interfaces_from_lldp_remote_info(
+        return self.network_parser.build_interfaces_from_lldp_remote_info(
             remote_devices_list)
 
     def _get_lldp_neighbors(self, interfaces):
@@ -135,7 +135,7 @@ class NetworkDeviceExplorer(object):
         for interface in interfaces:
             if interface.is_valid_lldp_interface():
 
-                cmd = self.device_builder.lldp_neighbors_detail_cmd
+                cmd = self.network_parser.lldp_neighbors_detail_cmd
                 command = cmd.format(interface.local_port)
 
                 result = self._send_ssh_command(command, False)
@@ -143,35 +143,35 @@ class NetworkDeviceExplorer(object):
                 if result is not None:
                     devices_details += result
 
-        return self.device_builder\
+        return self.network_parser\
             .build_devices_from_lldp_remote_info(devices_details)
 
     def _assign_vlans_to_interfaces(self, interfaces):
-        if isinstance(self.device_builder, HPNetworkDeviceBuilder):
+        if isinstance(self.network_parser, HPNetworkParser):
             for vlan in self._get_vlans():
-                cmd = self.device_builder.vlans_specific_cmd
+                cmd = self.network_parser.vlans_specific_cmd
                 command = cmd.format(vlan.identifier)
 
                 specific_result = self._send_ssh_command(command, False)
 
                 if specific_result is not None:
-                    self.device_builder.associate_vlan_to_interfaces(
+                    self.network_parser.associate_vlan_to_interfaces(
                         interfaces, vlan, specific_result)
 
-        elif isinstance(self.device_builder, JuniperNetworkDeviceBuilder):
-            command = self.device_builder.vlans_global_cmd
+        elif isinstance(self.network_parser, JuniperNetworkParser):
+            command = self.network_parser.vlans_global_cmd
 
             result = self._send_ssh_command(command, False)
 
             if result is not None:
-                self.device_builder.associate_vlans_to_interfaces(
+                self.network_parser.associate_vlans_to_interfaces(
                     interfaces, result)
 
     def _get_vlans(self):
-        command = self.device_builder.vlans_global_cmd
+        command = self.network_parser.vlans_global_cmd
         result = self._send_ssh_command(command, False)
 
-        return self.device_builder.build_vlans_from_global_info(result)
+        return self.network_parser.build_vlans_from_global_info(result)
 
     def _open_ssh_connection(self):
         success = False
@@ -226,7 +226,7 @@ class NetworkDeviceExplorer(object):
             receive_buffer = ""
 
             # Waiting for the server to display all the data
-            w = self.device_builder.wait_string
+            w = self.network_parser.wait_string
             while not w in receive_buffer:
                 receive_buffer += self._receive_ssh_output()
 
@@ -240,7 +240,7 @@ class NetworkDeviceExplorer(object):
         return result
 
     def _prepare_switch(self):
-        for cmd in self.device_builder.preparation_cmds:
+        for cmd in self.network_parser.preparation_cmds:
             time.sleep(0.5)
             self.shell.send(cmd)
 

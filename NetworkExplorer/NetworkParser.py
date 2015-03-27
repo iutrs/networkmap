@@ -9,18 +9,18 @@ Date   : Mars 2015
 from NetworkObjects import *
 
 
-class NetworkDeviceBuilder(object):
+class NetworkParser(object):
     def __init__(self):
         raise NotImplementedError()
 
     @staticmethod
     def get_builder_type(result):
         for rawline in result.splitlines():
-            line = NetworkDeviceBuilder.clean(rawline)
+            line = NetworkParser.clean(rawline)
             if "ProCurve" in line or "Hewlett-Packard" in line:
-                return HPNetworkDeviceBuilder()
+                return HPNetworkParser()
             elif "JUNOS" in line or "Juniper" in line:
-                return JuniperNetworkDeviceBuilder()
+                return JuniperNetworkParser()
             elif "Cisco" in line:
                 return None
 
@@ -43,7 +43,8 @@ class NetworkDeviceBuilder(object):
 
         return (key, value)
 
-    @staticmethod
+
+    @staticmethod  # TODO Change for a regex
     def clean(string):
         return string\
             .replace("[24;1H", "")\
@@ -55,7 +56,7 @@ class NetworkDeviceBuilder(object):
             .replace("[24;13H", "")
 
 
-class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
+class HPNetworkParser(NetworkParser):
     def __init__(self):
         self.wait_string = "#"
         self.preparation_cmds = ["\n", "no page\n"]
@@ -242,16 +243,16 @@ class HPNetworkDeviceBuilder(NetworkDeviceBuilder):
             pass
 
     def _assign_vlan_to_interface(self, vlan, interface):
-        return NetworkDeviceBuilder.assign_vlan_to_interface(vlan, interface)
+        return NetworkParser.assign_vlan_to_interface(vlan, interface)
 
     def _extract_key_and_value_from_line(self, line):
-        return NetworkDeviceBuilder.extract_key_and_value_from_line(line)
+        return NetworkParser.extract_key_and_value_from_line(line)
 
     def _clean(self, string):
-        return NetworkDeviceBuilder.clean(string)
+        return NetworkParser.clean(string)
 
 
-class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
+class JuniperNetworkParser(NetworkParser):
     def __init__(self):
         self.wait_string = ">"
         self.preparation_cmds = ["set cli screen-length 0\n",
@@ -427,10 +428,10 @@ class JuniperNetworkDeviceBuilder(NetworkDeviceBuilder):
             #print("Unexpected key '{0}'.".format(key))
 
     def _assign_vlan_to_interface(self, vlan, interface):
-        return NetworkDeviceBuilder.assign_vlan_to_interface(vlan, interface)
+        return NetworkParser.assign_vlan_to_interface(vlan, interface)
 
     def _extract_key_and_value_from_line(self, line):
-        return NetworkDeviceBuilder.extract_key_and_value_from_line(line)
+        return NetworkParser.extract_key_and_value_from_line(line)
 
     def _clean(self, string):
-        return NetworkDeviceBuilder.clean(string)
+        return NetworkParser.clean(string)

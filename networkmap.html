@@ -14,6 +14,11 @@
 		
 		var jsonFile = "devices.json"
 		var devices = null;
+
+		// The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
+		$.ajaxSetup({
+            async: false
+        });
 		
 		$.getJSON(jsonFile, function(json) {
 			devices = json;

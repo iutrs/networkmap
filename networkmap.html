@@ -3,9 +3,6 @@
 <head>
     <title>networkmap</title>
 
-    <!-- Adapting the view for mobile devices -->
-    <meta name="viewport" content="target-densitydpi=device-dpi, width=device-width" />
-
     <script type="text/javascript" src="./js/vis.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
@@ -13,12 +10,19 @@
     
     <style type="text/css">
         html, body {
-            width: 95%;
-            height: 95%;
+            width: 99%;
+            height: 99%;
         }
         #networkmap {
-            width: 100%;
+            width: 75%;
             height: 100%;
+            float: left;
+            border: 1px solid lightgray;
+        }
+        #options {
+            width: 24%;
+            height: 100%;
+            float: right;
             border: 1px solid lightgray;
         }
     </style>
@@ -45,6 +49,7 @@
         // Arrays used to keep information in memory
         var myNodes = []
         var myEdges = []
+        var myVlans = []
 
         function draw() {
 
@@ -83,6 +88,9 @@
 
             network = new vis.Network(container, data, options);
             network.freezeSimulation(true)
+            
+            console.log(myVlans)
+            createVlansList()
         }
 
         function createNodes() {
@@ -110,14 +118,14 @@
         }
 
         function createEdges() {
-            for (var d = 0; d < devices.length; d++) {
-                device = devices[d]
+            for (var i = 0; i < devices.length; i++) {
+                device = devices[i]
 
-                for (var i = 0; i < device.interfaces.length; i++) {
-                    int = device.interfaces[i]
+                for (var j = 0; j < device.interfaces.length; j++) {
+                    int = device.interfaces[j]
                     link = [device.mac_address, int.remote_mac_address]
 
-                    if (myNodes.indexOf(int.remote_mac_address) > -1 && !exists(link)) {
+                    if (myNodes.indexOf(int.remote_mac_address) > -1 && !linkExists(link)) {
                         visEdges.push(
                             {
                                 'from': link[0],
@@ -134,18 +142,68 @@
 
                         myEdges.push(link)
                     }
+                    
+                    for (var k = 0; k < int.vlans.length; k++) {
+                        vlan = int.vlans[k]
+                        if (!vlanExists(vlan)) {
+                            myVlans.push(vlan)
+                        }
+                    }
                 }
             }
 
         }
+        
+        function createVlansList() {
+            var options = "<b>Vlan:</b> <select id='vlans' onchange='displayVlanInfo()'>"
+            for (var i = 0; i < myVlans.length; i++) {
+                options += "<option value='" + myVlans[i].identifier + "'>" + myVlans[i].identifier + "</option>";
+            }
+            options += "</select><div id='vlanInfo'></div>";
+            document.getElementById("options").innerHTML += options;
+            
+            displayVlanInfo();
+        }
+        
+        function displayVlanInfo() {
+            var vlans = document.getElementById("vlans");
+
+            id = vlans.options[vlans.selectedIndex].value
+
+            vlan = getVlan(id);
+            info = "<b>Name:</b> " + vlan.name + "</br>";
+            info += "<b>Mode:</b> " + vlan.mode + "</br>";
+            info += "<b>Status:</b> " + vlan.status;
+            
+            document.getElementById("vlanInfo").innerHTML = info;
+        }
 
         // Verifies whether a link already exist or not
-        function exists(link) {
-            for (var e = 0; e < myEdges.length; e++) {
-                from = myEdges[e][0]
-                to = myEdges[e][1]
+        function linkExists(link) {
+            for (var i = 0; i < myEdges.length; i++) {
+                from = myEdges[i][0]
+                to = myEdges[i][1]
                 if ((from == link[0] && to == link[1]) ||
                     (from == link[1] && to == link[0])) {
+                    return true
+                }
+            }
+        }
+        
+        // Return the vlan associated to the id
+        function getVlan(id) {
+            for (var i = 0; i < myVlans.length; i++) {
+                if (myVlans[i].identifier == id) {
+                    return myVlans[i]
+                }
+            }
+        }
+        
+        // Verifies whether a vlan already exist or not
+        function vlanExists(vlan) {
+            myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
+            for (var i = 0; i < myVlans.length; i++) {
+                if (myVlans[i].identifier == vlan.identifier) {
                     return true
                 }
             }
@@ -155,6 +213,7 @@
         function buildNodeDescription(device) {
             ip = "?"
             ip_type = "?"
+            
             if (device.ip_address) {
                 ip = device.ip_address
             }
@@ -176,24 +235,25 @@
         function buildDeviceConnectedPorts(device) {
 
             var connectedPorts = "";
-            var unknownCount = 0
+            var otherCount = 0
 
             for (var i = 0; i < device.interfaces.length; i++) {
                 var int = device.interfaces[i];
                 
                 if (int.remote_system_name == "") {
-                    unknownCount++;
+                    otherCount++;
                 }
                 else {
                     var line = int.local_port + " --> " + 
-                        int.remote_port + "\t(" + int.remote_system_name + ")</br>";
+                        int.remote_port + "(" +
+                        int.remote_system_name + ")</br>";
                         
                     connectedPorts += line;
                 }
             }
 
-            if (unknownCount > 0) {
-                connectedPorts += "<b>Other connections:</b> " + unknownCount
+            if (otherCount > 0) {
+                connectedPorts += "<b>Other connections:</b> " + otherCount
             }
 
             return connectedPorts != "" ? connectedPorts : ""; 
@@ -204,6 +264,8 @@
 
 <body onload="draw();" onresize="network.redraw();">
     <div id="networkmap"></div>
+    <div id="options"></div>
+    
 </body>
 
 </html>

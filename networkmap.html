@@ -9,17 +9,19 @@
     <script type="text/javascript" src="./js/vis.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
 
-  <style type="text/css">
-    html, body {
-      width: 100%;
-      height: 100%;
-    }
-
-    #networkmap {
-      width: 100%;
-      height: 100%;
-    }
-  </style>
+    <link type="text/css" href="./js/vis.css" rel="stylesheet"/>
+    
+    <style type="text/css">
+        html, body {
+            width: 95%;
+            height: 95%;
+        }
+        #networkmap {
+            width: 100%;
+            height: 100%;
+            border: 1px solid lightgray;
+        }
+    </style>
 
     <script type="text/javascript">
         var jsonFile = "devices.json"
@@ -33,6 +35,8 @@
         $.getJSON(jsonFile, function(json) {
             devices = json;
         });
+
+        var network = null;
 
         // Arrays used by vis to generate the network graph
         var visNodes = []
@@ -48,22 +52,37 @@
             createEdges();
 
             var container = document.getElementById('networkmap');
-            var data = {nodes: visNodes, edges: visEdges};
+
+            var data = {
+                nodes: visNodes,
+                edges: visEdges
+            };
+
             var options = {
                 stabilize: true,
                 selectable: true,
-                //configurePhysics:true,
+                smoothCurves: false,
                 physics: {
-                    repulsion: {
-                        nodeDistance: 75,
+                    barnesHut: {
+                        enabled: true,
+                        gravitationalConstant: -2500,
+                        centralGravity: 0.5,
                         springLength: 150,
-                        damping: 0.3
+                        springConstant: 0.1,
+                        damping: 1
+                    },
+                    repulsion: {
+                        centralGravity: 0.5,
+                        springLength: 150,
+                        springConstant: 0.1,
+                        nodeDistance: 75,
+                        damping: 1
                     }
-                },
-                smoothCurves: false
+                }
             };
 
-            var network = new vis.Network(container, data, options);
+            network = new vis.Network(container, data, options);
+            network.freezeSimulation(true)
         }
 
         function createNodes() {
@@ -81,7 +100,8 @@
                     'label': device.system_name + "\n" + device.ip_address,
                     'shape': 'square',
                     'color': color,
-                    'title': "",
+                    'title': buildNodeDescription(device),
+                    'value': device.interfaces.length + 1,
                     'mass': device.interfaces.length + 1
                 });
 
@@ -104,13 +124,12 @@
                                 'to': link[1],
                                 'style': 'line',
                                 'color': undefined,
-                                'width': 2,
-                                'length' : 500,
+                                'width': undefined,
+                                'length': undefined,
                                 'value': undefined,
-                                'title': undefined,
-                                'textTo': int.local_port,
-                                'textFrom': int.remote_port
-                            
+                                'title': '',
+                                'label': int.remote_port + " -> " + int.local_port,
+                                'labelAlignment' : 'line-center'
                             });
 
                         myEdges.push(link)
@@ -120,6 +139,7 @@
 
         }
 
+        // Verifies whether a link already exist or not
         function exists(link) {
             for (var e = 0; e < myEdges.length; e++) {
                 from = myEdges[e][0]
@@ -129,6 +149,54 @@
                     return true
                 }
             }
+        }
+        
+        // Builds node description when hovering
+        function buildNodeDescription(device) {
+            ip = "?"
+            ip_type = "?"
+            if (device.ip_address) {
+                ip = device.ip_address
+            }
+            if (device.ip_address_type) {
+                ip_type = device.ip_address_type.toUpperCase()
+            }
+            
+            return (
+                "<b>" + device.system_name + "</b></br>" +
+                device.system_description + "</br>" +
+                "<b>" + ip_type + ":</b> " + ip + "</br>" +
+                "<b>MAC:</b> " + device.mac_address + "</br>" +
+                "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
+                "<b>Connected ports:</b></br>" + buildDeviceConnectedPorts(device)
+            )
+        }
+        
+        // Builds device's connected ports list
+        function buildDeviceConnectedPorts(device) {
+
+            var connectedPorts = "";
+            var unknownCount = 0
+
+            for (var i = 0; i < device.interfaces.length; i++) {
+                var int = device.interfaces[i];
+                
+                if (int.remote_system_name == "") {
+                    unknownCount++;
+                }
+                else {
+                    var line = int.local_port + " --> " + 
+                        int.remote_port + "\t(" + int.remote_system_name + ")</br>";
+                        
+                    connectedPorts += line;
+                }
+            }
+
+            if (unknownCount > 0) {
+                connectedPorts += "<b>Other connections:</b> " + unknownCount
+            }
+
+            return connectedPorts != "" ? connectedPorts : ""; 
         }
     </script>
 

@@ -1,0 +1,18 @@
+html, body {
+    width: 99%;
+    height: 99%;
+}
+
+#networkmap {
+    width: 75%;
+    height: 100%;
+    float: left;
+    border: 1px solid lightgray;
+}
+
+#options {
+    width: 24%;
+    height: 100%;
+    float: right;
+    border: 1px solid lightgray;
+}

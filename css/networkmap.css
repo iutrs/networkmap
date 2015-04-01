@@ -3,6 +3,11 @@ html, body {
     height: 99%;
 }
 
+a:link, a:visited, a:hover, a:active {
+    text-decoration: none;
+    color: #000000;
+}
+
 #networkmap {
     width: 75%;
     height: 100%;

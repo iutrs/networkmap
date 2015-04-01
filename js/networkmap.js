@@ -321,10 +321,14 @@ function highlightVlanDiffusion(id) {
         if (interfaceFrom != null && interfaceTo != null) {
             vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
             vlansTo = vlansIdentifiers(interfaceTo.vlans);
-
+            console.log(vlansFrom, vlansTo)
             if (vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1) {
                 edge.width = 8;
                 edge.color = "#FF9900";
+            }
+            else {
+                edge.width = 2;
+                edge.color = undefined;
             }
         }
     }

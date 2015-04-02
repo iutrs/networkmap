@@ -7,6 +7,7 @@ Ignore =
 [SSH]
 Timeout = 10
 MaximumBytesToReceive = 1024
+MaximumAttempts = 3
 Username = ?
 Password = ?
 

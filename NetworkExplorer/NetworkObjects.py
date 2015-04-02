@@ -39,6 +39,23 @@ class Vlan(object):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=False, indent=4)
 
+
+class VirtualMachine(object):
+    def __init__(
+            self,
+            identifier=None,
+            name=None,
+            state=None):
+
+        self.identifier = identifier
+        self.name = name
+        self.state = state
+
+    def to_JSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__,
+                          sort_keys=False, indent=4)
+
+
 class NetworkDeviceInterface(object):
     def __init__(
             self,
@@ -64,6 +81,7 @@ class NetworkDeviceInterface(object):
     def to_JSON(self):
         return json.dumps(self, default=lambda o: o.__dict__,
                           sort_keys=False, indent=4)
+
 
 class NetworkDevice(object):
     def __init__(

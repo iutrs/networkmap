@@ -95,7 +95,9 @@ class NetworkDeviceExplorer(object):
                 return
 
             #Parsing device from local information
-            device = self._get_lldp_local_device()
+            local_info = self._show_lldp_local_device()
+            device = self.network_parser.parse_device_from_lldp_local_info(
+                local_info)
 
             if device is None or device.system_name is None:
                 print("Could not parse device {0}.".format(self.hostname))
@@ -105,24 +107,20 @@ class NetworkDeviceExplorer(object):
             print("Discovering lldp neighbors for {0}..."
                   .format(device.system_name))
 
-            interfaces = self._get_lldp_interfaces()
-
-            self._assign_vlans_to_interfaces(interfaces)
-
-            device.interfaces = interfaces
-
-            neighbors = self._get_lldp_neighbors(interfaces)
+            neighbors = self._get_lldp_neighbors(device)
 
             self._close_ssh_connection()
 
             for neighbor in neighbors:
-                if neighbor.is_valid_lldp_device() and \
-                   neighbor.mac_address not in explored_devices:
-                        explored_devices[neighbor.mac_address] = neighbor
+                valid = neighbor.is_valid_lldp_device()
+                explored = neighbor.mac_address in explored_devices
 
-                        if not self._ignore(neighbor.ip_address) and \
-                           not self._ignore(neighbor.system_name):
-                            queue.put(neighbor.system_name)
+                if valid and not explored:
+                    explored_devices[neighbor.mac_address] = neighbor
+
+                    if not self._ignore(neighbor.ip_address) and \
+                       not self._ignore(neighbor.system_name):
+                        queue.put(neighbor.system_name)
 
             explored_devices[device.mac_address] = device
 
@@ -133,63 +131,85 @@ class NetworkDeviceExplorer(object):
 #        time.sleep(5)
 #        queue.put(self.hostname)
 
-    def _get_lldp_local_device(self):
+    def _show_lldp_local_device(self):
         command = self.network_parser.lldp_local_cmd
-        device_info = self._send_ssh_command(command, True)
+        result = self._send_ssh_command(command, True)
+        return result
 
-        return self.network_parser.parse_device_from_lldp_local_info(
-            device_info)
-
-    def _get_lldp_interfaces(self):
+    def _show_lldp_neighbors(self):
         command = self.network_parser.lldp_neighbors_cmd
-        remote_devices_list = self._send_ssh_command(command, False)
+        result = self._send_ssh_command(command, False)
+        return result
 
-        return self.network_parser.parse_interfaces_from_lldp_remote_info(
-            remote_devices_list)
+    def _show_lldp_neighbor_detail(self, port):
+        command = self.network_parser.lldp_neighbors_detail_cmd.format(port)
+        result = self._send_ssh_command(command, False)
+        return result
 
-    def _get_lldp_neighbors(self, interfaces):
-        devices_details = ""
+    def _show_vlans(self):
+        command = self.network_parser.vlans_global_cmd
+        result = self._send_ssh_command(command, False)
+        return result
 
-        for interface in interfaces:
-            if interface.is_valid_lldp_interface():
+    def _show_vlan_detail(self, vlan_id):
+        command = self.network_parser.vlans_specific_cmd.format(vlan_id)
+        result = self._send_ssh_command(command, False)
+        return result
 
-                cmd = self.network_parser.lldp_neighbors_detail_cmd
-                command = cmd.format(interface.local_port)
+    def _show_vms(self):
+        command = self.network_parser.vms_list_cmd
+        result = self._send_ssh_command(command, False)
+        return result
 
-                result = self._send_ssh_command(command, False)
+    def _get_lldp_neighbors(self, device):
 
-                if result is not None:
-                    devices_details += result
+        neighbors_result = self._show_lldp_neighbors()
+
+        if isinstance(self.network_parser, HPNetworkParser) or \
+           isinstance(self.network_parser, JuniperNetworkParser):
+
+            device.interfaces = self._get_lldp_interfaces(neighbors_result)
+            neighbors_result = ""
+
+            for interface in device.interfaces:
+                if interface.is_valid_lldp_interface():
+
+                    partial_result = self._show_lldp_neighbor_detail(
+                        interface.local_port)
+                    if partial_result is not None:
+                        neighbors_result += partial_result
+
+        elif isinstance(self.network_parser, LinuxNetworkParser):
+            pass
+            vms = self._show_vms()
+            device.virtual_machines = self.network_parser.parse_vms_list(vms)
 
         return self.network_parser\
-            .parse_devices_from_lldp_remote_info(devices_details)
+            .parse_devices_from_lldp_remote_info(neighbors_result)
+
+    def _get_lldp_interfaces(self, lldp_result):
+        interfaces = self.network_parser\
+            .parse_interfaces_from_lldp_remote_info(lldp_result)
+        self._assign_vlans_to_interfaces(interfaces)
+        return interfaces
 
     def _assign_vlans_to_interfaces(self, interfaces):
         if isinstance(self.network_parser, HPNetworkParser):
-            for vlan in self._get_vlans():
-                cmd = self.network_parser.vlans_specific_cmd
-                command = cmd.format(vlan.identifier)
+            vlans = self.network_parser.parse_vlans_from_global_info(
+                self._show_vlans())
 
-                specific_result = self._send_ssh_command(command, False)
-
+            for vlan in vlans:
+                specific_result = self._show_vlan_detail(vlan.identifier)
                 if specific_result is not None:
                     self.network_parser.associate_vlan_to_interfaces(
                         interfaces, vlan, specific_result)
 
         elif isinstance(self.network_parser, JuniperNetworkParser):
-            command = self.network_parser.vlans_global_cmd
-
-            result = self._send_ssh_command(command, False)
+            result = self._show_vlans()
 
             if result is not None:
                 self.network_parser.associate_vlans_to_interfaces(
                     interfaces, result)
-
-    def _get_vlans(self):
-        command = self.network_parser.vlans_global_cmd
-        result = self._send_ssh_command(command, False)
-
-        return self.network_parser.parse_vlans_from_global_info(result)
 
     def _open_ssh_connection(self):
         success = False

@@ -21,6 +21,8 @@ class NetworkParser(object):
                 return HPNetworkParser()
             elif "JUNOS" in line or "Juniper" in line:
                 return JuniperNetworkParser()
+            elif "Linux" in line:
+                return LinuxNetworkParser()
             elif "Cisco" in line:
                 return None
 
@@ -461,10 +463,10 @@ class LinuxNetworkParser(NetworkParser):
                     interface = NetworkDeviceInterface()
 
         except Exception as e:
-            print("Could not extract devices nor interfaces from '{0}'. {1}"
+            print("Could not extract devices from '{0}'. {1}"
                   .format(lldp_result, e))
 
-        return interfaces, devices
+        return devices
 
     def attribute_lldp_remote_info(self, device, interface, key, value):
         if "Interface" in key:
@@ -491,14 +493,14 @@ class LinuxNetworkParser(NetworkParser):
         else:
             pass
 
-    def parse_vm_list(vm_result):
+    def parse_vms_list(vm_result):
         vms = []
         try:
             name_index = None
             state_index = None
             targets = ["Name", "State"]
 
-            for rawline in lldp_result.splitlines():
+            for rawline in vm_result.splitlines():
                 line = self._clean(rawline)
 
                 if all(t in line for t in targets):

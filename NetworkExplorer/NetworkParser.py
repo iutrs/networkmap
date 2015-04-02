@@ -170,6 +170,9 @@ class HPNetworkParser(NetworkParser):
 
     def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
         try:
+            if specific_result is None:
+                raise Exception
+
             mode_index = None
             unknown_index = None
             status_index = None

@@ -64,10 +64,10 @@ class NetworkDeviceExplorer(object):
 
     def explore_lldp(self, explored_devices, queue):
         """
-        Explores a Hewlett-Packard\xc2 switch using the LLDP protocol in \
-            order to add his valid neighbors in the queue.
-        :param explored_devices: The list of the devices already explored
-        :type explored_devices: NetworkDevice[]
+        Explores a device using the LLDP protocol in order to add its valid \
+        neighbors in the queue.
+        :param explored_devices: The dict of the devices already explored
+        :type explored_devices: {str : NetworkDevice}
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
@@ -198,7 +198,6 @@ class NetworkDeviceExplorer(object):
         :return: If the connection succeeded
         :rtype: bool
         """
-        success = False
         try:
             self.ssh.connect(hostname=self.hostname,
                              username=self.ssh_username,
@@ -207,17 +206,18 @@ class NetworkDeviceExplorer(object):
             self.shell = self.ssh.invoke_shell()
             self.shell.settimeout(self.ssh_timeout)
             self.shell.set_combine_stderr(True)
-            time.sleep(1)
+
             print("Connected to {0}.".format(self.hostname))
-            success = True
+            time.sleep(1)
+
+            return True
+
         except socket.error as se:
             print("Error with {0}. {1}".format(self.hostname, se))
         except paramiko.AuthenticationException as pae:
             print("Error with {0}. {1}".format(self.hostname, pae))
         except Exception as e:
             print("Unexpected error with {0}. {1}".format(self.hostname, e))
-
-        return success
 
     def _close_ssh_connection(self):
         try:
@@ -235,8 +235,6 @@ class NetworkDeviceExplorer(object):
         :return: Returns the result from the command's output
         :rtype: str
         """
-        result = None
-
         try:
             if self.prepare:
                 self._prepare_switch()
@@ -251,14 +249,12 @@ class NetworkDeviceExplorer(object):
             while not self.network_parser.wait_string in receive_buffer:
                 receive_buffer += self._receive_ssh_output()
 
-            result = receive_buffer
+            return receive_buffer
 
         except socket.error as se:
             print("Socket error with {0}. {1}".format(self.hostname, se))
         except Exception as e:
             print("Unexpected error with {0}. {1}".format(self.hostname, e))
-
-        return result
 
     def _prepare_switch(self):
         for cmd in self.network_parser.preparation_cmds:
@@ -285,6 +281,15 @@ def _parse_args():
 
     return parser.parse_args()
 
+def _write_results_to_file(results, outputfile):
+    output = "["
+    for key, value in results.items():
+        output += "{0},\n".format(value.to_JSON())
+    output = output[:-2] + "]"
+
+    _file = open(outputfile, "w")
+    _file.write(output)
+    _file.close()
 
 if __name__ == "__main__":
     args = _parse_args()
@@ -336,14 +341,7 @@ if __name__ == "__main__":
             print("Unsupported protocol '{0}'.".format(protocol))
 
         if len(explored_devices) > 0:
-            output = "["
-            for key, device in explored_devices.items():
-                output += "{0},\n".format(device.to_JSON())
-            output = output[:-2] + "]"
-
-            _file = open(outputfile, "w")
-            _file.write(output)
-            _file.close()
+            _write_results_to_file(explored_devices, outputfile)
 
             print("Found {0} device(s) in {1} second(s).".format(
                   len(explored_devices), round(time.time() - start_time, 2)))

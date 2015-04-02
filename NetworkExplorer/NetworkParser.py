@@ -448,7 +448,7 @@ class LinuxNetworkParser(NetworkParser):
             for rawline in lldp_result.splitlines():
                 line = self._clean(rawline)
 
-                line_count++
+                line_count += 1
                 if ':' in line and line_count > 3:
                     key, value = self._extract_key_and_value_from_line(line)
                     self.attribute_lldp_remote_info(self, device, interface,

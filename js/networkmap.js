@@ -1,4 +1,4 @@
-const jsonFile = "devices.json"
+const jsonFile = "all_devices.json"
 var devices = null;
 
 // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
@@ -21,6 +21,12 @@ var myVlans = []
 var network = null;
 
 function draw() {
+
+    if (devices == null) {
+        errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>"
+        document.getElementById('networkmap').innerHTML = errorMessage
+    }
+
     createNodes();
     createEdges();
 
@@ -62,6 +68,67 @@ function draw() {
 }
 
 /**
+ * Create the nodes used by vis.js
+ */
+function createNodes() {
+    for (var i = 0; i < devices.length; i++) {
+        var device = devices[i]
+
+        var color = device.interfaces.length == 0 ? '#C5000B' : '#2B7CE9';
+
+        nodes.push(
+        {
+            'id': device.mac_address,
+            'label': device.system_name + "\n" + device.ip_address,
+            'shape': 'square',
+            'color': color,
+            'title': undefined,
+            'value': device.interfaces.length + 1,
+            'mass': device.interfaces.length + 1
+        });
+    }
+}
+
+/**
+ * Create the edges used by vis.js
+ */
+function createEdges() {
+    for (var i = 0; i < devices.length; i++) {
+        device = devices[i]
+
+        for (var j = 0; j < device.interfaces.length; j++) {
+            var int = device.interfaces[j]
+            var link = [device.mac_address, int.remote_mac_address]
+
+            if (nodeExists(int.remote_mac_address) && !edgeExists(link)) {
+                edges.push(
+                    {
+                        'from': link[0],
+                        'to': link[1],
+                        'style': 'line',
+                        'color': undefined,
+                        'width': 2,
+                        'length': undefined,
+                        'value': undefined,
+                        'title': undefined,
+                        'label': int.remote_port + " -> " + int.local_port,
+                        'labelAlignment' : 'line-center'
+                    });
+            }
+            
+            for (var k = 0; k < int.vlans.length; k++) {
+                var vlan = int.vlans[k]
+                if (!vlanExists(vlan)) {
+                    myVlans.push(vlan)
+                }
+            }
+            myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
+        }
+    }
+
+}
+
+/**
  * Adding the events listeners
  */
 function addEventsListeners() {
@@ -85,18 +152,49 @@ function onSelect(properties) {
 }
 
 /*
- * Manage the event when an object is selected
+ * Manage the event when a node is selected
  */
 function onNodeSelect(node) {
-    return buildNodeDescription(getDevice(node));
+    var device = getDevice(node);
+    return buildNodeDescription(device);
 }
 
 /*
- * Manage the event when an object is selected
+ * Manage the event when an edge is selected
  */
 function onEdgeSelect(edge) {
     var edge = getEdge(edge);
+    return buildEdgeDescription(edge);
+}
 
+/**
+ * Builds node description
+ */
+function buildNodeDescription(device) {
+    ip = "?"
+    ip_type = "IP"
+
+    if (device.ip_address) {
+        ip = device.ip_address
+    }
+    if (device.ip_address_type) {
+        ip_type = device.ip_address_type.toUpperCase()
+    }
+
+    return (
+        "<b>Name:</b> " + device.system_name + "</br>" +
+        "<b>Description:</b> " + device.system_description + "</br>" +
+        "<b>" + ip_type + ":</b> " + ip + "</br>" +
+        "<b>MAC:</b> " + device.mac_address + "</br>" +
+        "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
+        "<b>Connected ports:</b></br>" + buildConnectedPortsList(device)
+    )
+}
+
+/**
+ * Buils edge description
+ */
+function buildEdgeDescription(edge) {
     var macAdressFrom = edge.from;
     var macAdressTo = edge.to;
 
@@ -115,15 +213,15 @@ function onEdgeSelect(edge) {
     contentFrom += (interfaceFrom != null) ? "" : "No vlans could be found.";
     contentTo += (interfaceTo != null) ? "" : "No vlans could be found.";
 
-    var differences = vlansIdentifiers(vlansTo).diff(vlansIdentifiers(vlansFrom));
+    var differences = vlansIdentifiers(vlansTo).diff(vlansIdentifiers(vlansFrom))
 
     if (vlansFrom.length > 0) {
-        contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>";
+        contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>"
         contentFrom += vlansToString(vlansFrom, macAdressFrom, differences);
     }
 
     if (vlansTo.length > 0) {
-        contentTo += "Vlans on <b>" + interfaceTo.local_port + "</b>&nbsp:</br>";
+        contentTo += "Vlans on <b>" + interfaceTo.local_port + "</b>&nbsp:</br>"
         contentTo += vlansToString(vlansTo, macAdressTo, differences);
     }
 
@@ -196,80 +294,6 @@ function toggle(divId) {
    }
 }
 
-
-/*
- * Manage the event when an object is selected
- */
-function getInterfaceConnectedTo(device, macAdress) {
-    for (var i = 0; i < device.interfaces.length; i++) {
-        var int = device.interfaces[i]
-        if (int.remote_mac_address == macAdress) {
-            return int;
-        }
-    }
-}
-
-/**
- * Create the nodes used by vis.js
- */
-function createNodes() {
-    for (var i = 0; i < devices.length; i++) {
-        var device = devices[i]
-
-        var color = device.interfaces.length == 0 ? '#C5000B' : '#2B7CE9';
-
-        nodes.push(
-        {
-            'id': device.mac_address,
-            'label': device.system_name + "\n" + device.ip_address,
-            'shape': 'square',
-            'color': color,
-            'title': undefined,
-            'value': device.interfaces.length + 1,
-            'mass': device.interfaces.length + 1
-        });
-    }
-}
-
-/**
- * Create the edges used by vis.js
- */
-function createEdges() {
-    for (var i = 0; i < devices.length; i++) {
-        device = devices[i]
-
-        for (var j = 0; j < device.interfaces.length; j++) {
-            var int = device.interfaces[j]
-            var link = [device.mac_address, int.remote_mac_address]
-
-            if (nodeExists(int.remote_mac_address) && !edgeExists(link)) {
-                edges.push(
-                    {
-                        'from': link[0],
-                        'to': link[1],
-                        'style': 'line',
-                        'color': undefined,
-                        'width': 2,
-                        'length': undefined,
-                        'value': undefined,
-                        'title': undefined,
-                        'label': int.remote_port + " -> " + int.local_port,
-                        'labelAlignment' : 'line-center'
-                    });
-            }
-            
-            for (var k = 0; k < int.vlans.length; k++) {
-                var vlan = int.vlans[k]
-                if (!vlanExists(vlan)) {
-                    myVlans.push(vlan)
-                }
-            }
-            myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
-        }
-    }
-
-}
-
 /**
  * Generates a dropdown list containing all the vlans identifier
  */
@@ -282,7 +306,6 @@ function createVlansList() {
     document.getElementById("vlanSelect").innerHTML = options;
 
     displayVlanInfo();
-
 }
 
 /**
@@ -336,6 +359,18 @@ function highlightVlanDiffusion(id) {
     network.freezeSimulation(false);
     network.setData({nodes: nodes, edges: edges});
     network.freezeSimulation(true);
+}
+
+/*
+ * Get the interface connected from a device to another known mac address
+ */
+function getInterfaceConnectedTo(device, macAdress) {
+    for (var i = 0; i < device.interfaces.length; i++) {
+        var int = device.interfaces[i]
+        if (int.remote_mac_address == macAdress) {
+            return int;
+        }
+    }
 }
 
 /**
@@ -410,62 +445,6 @@ function edgeExists(link) {
         }
     }
 }
-
-
-/**
- * Builds node description when hovering
- */
-function buildNodeDescription(device) {
-    ip = "?"
-    ip_type = "IP"
-
-    if (device.ip_address) {
-        ip = device.ip_address
-    }
-    if (device.ip_address_type) {
-        ip_type = device.ip_address_type.toUpperCase()
-    }
-
-    return (
-        "<b>Name:</b> " + device.system_name + "</br>" +
-        "<b>Description:</b> " + device.system_description + "</br>" +
-        "<b>" + ip_type + ":</b> " + ip + "</br>" +
-        "<b>MAC:</b> " + device.mac_address + "</br>" +
-        "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
-        "<b>Connected ports:</b></br>" + buildConnectedPortsList(device)
-    )
-}
-
-/**
- * Builds device's connected ports list
- */
-function buildConnectedPortsList(device) {
-
-    var connectedPorts = "";
-    var otherCount = 0
-
-    for (var i = 0; i < device.interfaces.length; i++) {
-        var int = device.interfaces[i];
-        
-        if (int.remote_system_name == "") {
-            otherCount++;
-        }
-        else {
-            var line = int.local_port + " --> " + 
-                int.remote_port + " (" +
-                int.remote_system_name + ")</br>";
-                
-            connectedPorts += line;
-        }
-    }
-
-    if (otherCount > 0) {
-        connectedPorts += "<b>Other connections:</b> " + otherCount
-    }
-
-    return connectedPorts != "" ? connectedPorts : ""; 
-}
-
 
 /*
  * Returns the differences between two arrays

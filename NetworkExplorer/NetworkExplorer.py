@@ -22,7 +22,6 @@ from NetworkParser import *
 
 DEFAULT_MAX_BYTES = 2048*2048
 DEFAULT_TIMEOUT = 10
-#DEFAULT_MAX_ATTEMPTS = 1
 DEFAULT_USERNAME = "admin"
 DEFAULT_PASSWORD = ""
 
@@ -33,7 +32,7 @@ class NetworkDeviceExplorer(object):
     def __init__(self, hostname):
 
         self.hostname = hostname
-
+        self.prepare = True
         self.network_parser = None
 
         self.ssh = paramiko.SSHClient()
@@ -49,9 +48,6 @@ class NetworkDeviceExplorer(object):
         self.ssh_username = DEFAULT_USERNAME
         self.ssh_password = DEFAULT_PASSWORD
 
-#        self.ssh_max_attempts = DEFAULT_MAX_ATTEMPTS
-#        self.attempts = 0
-
         try:
             self.ignore_list = config.get('DEFAULT', 'Ignore').split()
 
@@ -60,8 +56,6 @@ class NetworkDeviceExplorer(object):
 
             self.ssh_username = config.get('SSH', 'Username')
             self.ssh_password = config.get('SSH', 'Password')
-
-#            self.ssh_max_attempts = config.getint('SSH', 'MaximumAttempts')
 
         except ConfigParser.Error as cpe:
             print("Configuration error: {0}".format(cpe))
@@ -77,10 +71,6 @@ class NetworkDeviceExplorer(object):
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
-#        self.attempts += 1
-#        if self.attempts > self.ssh_max_attempts:
-#            return
-
         if self._open_ssh_connection():
 
             #Determining the type of the current device from the switch prompt
@@ -91,7 +81,6 @@ class NetworkDeviceExplorer(object):
             if self.network_parser is None:
                 print("Could not recognize device {0}.".format(self.hostname))
                 print("Here is the switch prompt: {0}".format(switch_prompt))
-#                self._retry(queue)
                 return
 
             #Parsing device from local information
@@ -101,8 +90,10 @@ class NetworkDeviceExplorer(object):
 
             if device is None or device.system_name is None:
                 print("Could not parse device {0}.".format(self.hostname))
-#                self._retry(queue)
                 return
+
+            # We don't need to prepare the switch anymore
+            self.prepare = False
 
             print("Discovering lldp neighbors for {0}..."
                   .format(device.system_name))
@@ -124,43 +115,6 @@ class NetworkDeviceExplorer(object):
 
             explored_devices[device.mac_address] = device
 
-#        else:
-#            self._retry(queue)
-
-#    def _retry(self, queue):
-#        time.sleep(5)
-#        queue.put(self.hostname)
-
-    def _show_lldp_local_device(self):
-        command = self.network_parser.lldp_local_cmd
-        result = self._send_ssh_command(command, True)
-        return result
-
-    def _show_lldp_neighbors(self):
-        command = self.network_parser.lldp_neighbors_cmd
-        result = self._send_ssh_command(command, False)
-        return result
-
-    def _show_lldp_neighbor_detail(self, port):
-        command = self.network_parser.lldp_neighbors_detail_cmd.format(port)
-        result = self._send_ssh_command(command, False)
-        return result
-
-    def _show_vlans(self):
-        command = self.network_parser.vlans_global_cmd
-        result = self._send_ssh_command(command, False)
-        return result
-
-    def _show_vlan_detail(self, vlan_id):
-        command = self.network_parser.vlans_specific_cmd.format(vlan_id)
-        result = self._send_ssh_command(command, False)
-        return result
-
-    def _show_vms(self):
-        command = self.network_parser.vms_list_cmd
-        result = self._send_ssh_command(command, False)
-        return result
-
     def _get_lldp_neighbors(self, device):
 
         neighbors_result = self._show_lldp_neighbors()
@@ -169,6 +123,8 @@ class NetworkDeviceExplorer(object):
            isinstance(self.network_parser, JuniperNetworkParser):
 
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
+            self._assign_vlans_to_interfaces(device.interfaces)
+
             neighbors_result = ""
 
             for interface in device.interfaces:
@@ -181,6 +137,7 @@ class NetworkDeviceExplorer(object):
 
         elif isinstance(self.network_parser, LinuxNetworkParser):
             pass
+            # TODO
             vms = self._show_vms()
             device.virtual_machines = self.network_parser.parse_vms_list(vms)
 
@@ -190,28 +147,57 @@ class NetworkDeviceExplorer(object):
     def _get_lldp_interfaces(self, lldp_result):
         interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(lldp_result)
-        self._assign_vlans_to_interfaces(interfaces)
         return interfaces
 
     def _assign_vlans_to_interfaces(self, interfaces):
+        result = self._show_vlans()
+        if result is None:
+            return
+
         if isinstance(self.network_parser, HPNetworkParser):
-            vlans = self.network_parser.parse_vlans_from_global_info(
-                self._show_vlans())
+            vlans = self.network_parser.parse_vlans_from_global_info(result)
 
             for vlan in vlans:
                 specific_result = self._show_vlan_detail(vlan.identifier)
-                if specific_result is not None:
-                    self.network_parser.associate_vlan_to_interfaces(
-                        interfaces, vlan, specific_result)
+
+                self.network_parser.associate_vlan_to_interfaces(
+                    interfaces, vlan, specific_result)
 
         elif isinstance(self.network_parser, JuniperNetworkParser):
-            result = self._show_vlans()
+            self.network_parser.associate_vlans_to_interfaces(
+                interfaces, result)
 
-            if result is not None:
-                self.network_parser.associate_vlans_to_interfaces(
-                    interfaces, result)
+    def _show_lldp_local_device(self):
+        command = self.network_parser.lldp_local_cmd
+        return self._send_ssh_command(command)
+
+    def _show_lldp_neighbors(self):
+        command = self.network_parser.lldp_neighbors_cmd
+        return self._send_ssh_command(command)
+
+    def _show_lldp_neighbor_detail(self, port):
+        command = self.network_parser.lldp_neighbors_detail_cmd.format(port)
+        return self._send_ssh_command(command)
+
+    def _show_vlans(self):
+        command = self.network_parser.vlans_global_cmd
+        return self._send_ssh_command(command)
+
+    def _show_vlan_detail(self, vlan_id):
+        command = self.network_parser.vlans_specific_cmd.format(vlan_id)
+        return self._send_ssh_command(command)
+
+    def _show_vms(self):
+        command = self.network_parser.vms_list_cmd
+        return self._send_ssh_command(command)
 
     def _open_ssh_connection(self):
+        """
+        Opens a SSH connection (using paramiko) with the device in order to \
+        retrieve the output data.
+        :return: If the connection succeeded
+        :rtype: bool
+        """
         success = False
         try:
             self.ssh.connect(hostname=self.hostname,
@@ -241,21 +227,18 @@ class NetworkDeviceExplorer(object):
             print("Could not close ssh connection with {0}. {1}"
                   .format(self.hostname, e))
 
-    def _send_ssh_command(self, command, prepare):
+    def _send_ssh_command(self, command):
         """
-        Opens a SSH connection using paramiko with a Hewlett-Packard\xc2 \
-        switch in order to retrieve the output data.
-        :param command: The command to execute (ending by a '\\n')
+        Sends a command to the device in order to retrieve the output data.
+        :param command: The command to execute (must end by a '\\n')
         :type command: str
-        :param prepare: Preparing the switch before the command
-        :type prepare: bool
         :return: Returns the result from the command's output
         :rtype: str
         """
         result = None
 
         try:
-            if prepare:
+            if self.prepare:
                 self._prepare_switch()
                 self._receive_ssh_output()
 
@@ -265,8 +248,7 @@ class NetworkDeviceExplorer(object):
             receive_buffer = ""
 
             # Waiting for the server to display all the data
-            w = self.network_parser.wait_string
-            while not w in receive_buffer:
+            while not self.network_parser.wait_string in receive_buffer:
                 receive_buffer += self._receive_ssh_output()
 
             result = receive_buffer

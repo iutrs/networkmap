@@ -14,7 +14,7 @@ class NetworkParser(object):
         raise NotImplementedError()
 
     @staticmethod
-    def get_builder_type(result):
+    def get_parser_type(result):
         for rawline in result.splitlines():
             line = NetworkParser.clean(rawline)
             if "ProCurve" in line or "Hewlett-Packard" in line:
@@ -24,7 +24,7 @@ class NetworkParser(object):
             elif "Cisco" in line:
                 return None
 
-        print("Could not get builder type: ", result)
+        print("Could not get parser type: ", result)
 
     @staticmethod
     def assign_vlan_to_interface(vlan, interface):
@@ -65,7 +65,7 @@ class HPNetworkParser(NetworkParser):
         self.vlans_global_cmd = "show vlans\n"
         self.vlans_specific_cmd = "show vlans {0}\n"
 
-    def build_device_from_lldp_local_info(self, lldp_result):
+    def parse_device_from_lldp_local_info(self, lldp_result):
         device = NetworkDevice()
 
         try:
@@ -81,12 +81,12 @@ class HPNetworkParser(NetworkParser):
 
         except Exception as e:
             device = None
-            print("Could not build network device from '{0}'. {1}".format(
+            print("Could not parse network device from '{0}'. {1}".format(
                   lldp_result, e))
 
         return device
 
-    def build_devices_from_lldp_remote_info(self, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, lldp_result):
         devices = []
 
         try:
@@ -104,19 +104,19 @@ class HPNetworkParser(NetworkParser):
                     device = NetworkDevice()
 
         except Exception as e:
-            print("Could not build network devices from '{0}'. {1}".format(
+            print("Could not parse network devices from '{0}'. {1}".format(
                   lldp_result, e))
 
         return devices
 
-    def build_interfaces_from_lldp_remote_info(self, lldp_result):
+    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
         interfaces = []
 
         try:
             for rawline in lldp_result.splitlines():
                 line = self._clean(rawline)
                 if len(line) > 57 and line[12] == '|':
-                    interface = self.build_interface_from_line(line)
+                    interface = self.parse_interface_from_line(line)
                     if interface.local_port != 'LocalPort':
                         interfaces.append(interface)
         except Exception as e:
@@ -125,7 +125,7 @@ class HPNetworkParser(NetworkParser):
 
         return interfaces
 
-    def build_interface_from_line(self, line):
+    def parse_interface_from_line(self, line):
 
         local_port = line[:11].strip()
         chassis_id = line[13:38].strip()
@@ -137,7 +137,7 @@ class HPNetworkParser(NetworkParser):
                                       remote_mac_address=chassis_id,
                                       remote_system_name=sys_name)
 
-    def build_vlans_from_global_info(self, global_result):
+    def parse_vlans_from_global_info(self, global_result):
         vlans = []
 
         try:
@@ -261,7 +261,7 @@ class JuniperNetworkParser(NetworkParser):
         self.lldp_neighbors_detail_cmd = "show lldp neighbors interface {0}\n"
         self.vlans_global_cmd = "show vlans detail\n"
 
-    def build_device_from_lldp_local_info(self, lldp_result):
+    def parse_device_from_lldp_local_info(self, lldp_result):
         device = NetworkDevice()
 
         try:
@@ -277,12 +277,12 @@ class JuniperNetworkParser(NetworkParser):
 
         except Exception as e:
             device = None
-            print("Could not build network device from '{0}'. {1}".format(
+            print("Could not parse network device from '{0}'. {1}".format(
                   lldp_result, e))
 
         return device
 
-    def build_devices_from_lldp_remote_info(self, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, lldp_result):
         devices = []
 
         try:
@@ -311,19 +311,19 @@ class JuniperNetworkParser(NetworkParser):
                     skip_line = True
 
         except Exception as e:
-            print("Could not build network devices from '{0}'. {1}".format(
+            print("Could not parse network devices from '{0}'. {1}".format(
                   lldp_result, e))
 
         return devices
 
-    def build_interfaces_from_lldp_remote_info(self, lldp_result):
+    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
         interfaces = []
 
         try:
             for rawline in lldp_result.splitlines():
                 line = self._clean(rawline)
                 if len(line) > 73:
-                    interface = self._build_interface_from_line(line)
+                    interface = self._parse_interface_from_line(line)
                     if interface.local_port != "Local Interface":
                         interfaces.append(interface)
         except Exception as e:
@@ -332,7 +332,7 @@ class JuniperNetworkParser(NetworkParser):
 
         return interfaces
 
-    def _build_interface_from_line(self, line):
+    def _parse_interface_from_line(self, line):
 
         local_port = line[:18].strip()
         chassis_id = line[39:58].strip().replace(':', ' ')
@@ -438,7 +438,7 @@ class LinuxNetworkParser(NetworkParser):
         self.lldp_neighbors_cmd = "lldpctl\n"
         self.vms_list_cmd = "virsh list --all\n"
 
-    def build_devices_from_lldp_remote_info(self, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, lldp_result):
         devices = []
         try:
             device = NetworkDevice()
@@ -491,7 +491,7 @@ class LinuxNetworkParser(NetworkParser):
         else:
             pass
 
-    def build_vm_list(vm_result):
+    def parse_vm_list(vm_result):
         vms = []
         try:
             name_index = None

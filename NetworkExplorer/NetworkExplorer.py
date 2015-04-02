@@ -22,6 +22,7 @@ from NetworkParser import *
 
 DEFAULT_MAX_BYTES = 2048*2048
 DEFAULT_TIMEOUT = 10
+#DEFAULT_MAX_ATTEMPTS = 1
 DEFAULT_USERNAME = "admin"
 DEFAULT_PASSWORD = ""
 
@@ -48,6 +49,9 @@ class NetworkDeviceExplorer(object):
         self.ssh_username = DEFAULT_USERNAME
         self.ssh_password = DEFAULT_PASSWORD
 
+#        self.ssh_max_attempts = DEFAULT_MAX_ATTEMPTS
+#        self.attempts = 0
+
         try:
             self.ignore_list = config.get('DEFAULT', 'Ignore').split()
 
@@ -56,6 +60,9 @@ class NetworkDeviceExplorer(object):
 
             self.ssh_username = config.get('SSH', 'Username')
             self.ssh_password = config.get('SSH', 'Password')
+
+#            self.ssh_max_attempts = config.getint('SSH', 'MaximumAttempts')
+
         except ConfigParser.Error as cpe:
             print("Configuration error: {0}".format(cpe))
         except Exception as e:
@@ -70,25 +77,29 @@ class NetworkDeviceExplorer(object):
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
+#        self.attempts += 1
+#        if self.attempts > self.ssh_max_attempts:
+#            return
 
         if self._open_ssh_connection():
 
             #Determining the type of the current device from the switch prompt
             switch_prompt = self._receive_ssh_output()
 
-            self.network_parser = NetworkParser.get_builder_type(
-                switch_prompt)
+            self.network_parser = NetworkParser.get_parser_type(switch_prompt)
 
             if self.network_parser is None:
                 print("Could not recognize device {0}.".format(self.hostname))
                 print("Here is the switch prompt: {0}".format(switch_prompt))
+#                self._retry(queue)
                 return
 
-            #Building device from local information
+            #Parsing device from local information
             device = self._get_lldp_local_device()
 
-            if device is None or device.mac_address is None:
-                print("Could not build device {0}.".format(self.hostname))
+            if device is None or device.system_name is None:
+                print("Could not parse device {0}.".format(self.hostname))
+#                self._retry(queue)
                 return
 
             print("Discovering lldp neighbors for {0}..."
@@ -115,18 +126,25 @@ class NetworkDeviceExplorer(object):
 
             explored_devices[device.mac_address] = device
 
+#        else:
+#            self._retry(queue)
+
+#    def _retry(self, queue):
+#        time.sleep(5)
+#        queue.put(self.hostname)
+
     def _get_lldp_local_device(self):
         command = self.network_parser.lldp_local_cmd
         device_info = self._send_ssh_command(command, True)
 
-        return self.network_parser.build_device_from_lldp_local_info(
+        return self.network_parser.parse_device_from_lldp_local_info(
             device_info)
 
     def _get_lldp_interfaces(self):
         command = self.network_parser.lldp_neighbors_cmd
         remote_devices_list = self._send_ssh_command(command, False)
 
-        return self.network_parser.build_interfaces_from_lldp_remote_info(
+        return self.network_parser.parse_interfaces_from_lldp_remote_info(
             remote_devices_list)
 
     def _get_lldp_neighbors(self, interfaces):
@@ -144,7 +162,7 @@ class NetworkDeviceExplorer(object):
                     devices_details += result
 
         return self.network_parser\
-            .build_devices_from_lldp_remote_info(devices_details)
+            .parse_devices_from_lldp_remote_info(devices_details)
 
     def _assign_vlans_to_interfaces(self, interfaces):
         if isinstance(self.network_parser, HPNetworkParser):
@@ -171,14 +189,15 @@ class NetworkDeviceExplorer(object):
         command = self.network_parser.vlans_global_cmd
         result = self._send_ssh_command(command, False)
 
-        return self.network_parser.build_vlans_from_global_info(result)
+        return self.network_parser.parse_vlans_from_global_info(result)
 
     def _open_ssh_connection(self):
         success = False
         try:
             self.ssh.connect(hostname=self.hostname,
                              username=self.ssh_username,
-                             password=self.ssh_password)
+                             password=self.ssh_password,
+                             banner_timeout=5.0)
             self.shell = self.ssh.invoke_shell()
             self.shell.settimeout(self.ssh_timeout)
             self.shell.set_combine_stderr(True)
@@ -220,7 +239,7 @@ class NetworkDeviceExplorer(object):
                 self._prepare_switch()
                 self._receive_ssh_output()
 
-            # print("Executing command '{0}'...".format(command.rstrip()))
+#            print("Executing command '{0}'...".format(command.rstrip()))
             self.shell.send(command)
 
             receive_buffer = ""
@@ -265,13 +284,13 @@ def _parse_args():
     return parser.parse_args()
 
 
-def main():
+if __name__ == "__main__":
     args = _parse_args()
     config_file = args.config
 
     if not os.path.isfile(config_file):
         print("Could not find configuration file '{0}'.".format(config_file))
-        return
+        exit()
 
     try:
         config.read(config_file)
@@ -315,13 +334,12 @@ def main():
             print("Unsupported protocol '{0}'.".format(protocol))
 
         if len(explored_devices) > 0:
-            _file = open(outputfile, "w")
-
             output = "["
             for key, device in explored_devices.items():
                 output += "{0},\n".format(device.to_JSON())
             output = output[:-2] + "]"
 
+            _file = open(outputfile, "w")
             _file.write(output)
             _file.close()
 
@@ -332,6 +350,3 @@ def main():
 
     except ConfigParser.Error as cpe:
         print("Configuration error. {0}".format(cpe))
-
-if __name__ == "__main__":
-    main()

@@ -1,4 +1,4 @@
-const jsonFile = "all_devices.json"
+const jsonFile = "devices.json"
 var devices = null;
 
 // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
@@ -189,6 +189,36 @@ function buildNodeDescription(device) {
         "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
         "<b>Connected ports:</b></br>" + buildConnectedPortsList(device)
     )
+}
+
+/**
+ * Builds device's connected ports list
+ */
+function buildConnectedPortsList(device) {
+
+    var connectedPorts = "";
+    var otherCount = 0
+
+    for (var i = 0; i < device.interfaces.length; i++) {
+        var int = device.interfaces[i];
+        
+        if (int.remote_system_name == "") {
+            otherCount++;
+        }
+        else {
+            var line = int.local_port + " --> " + 
+                int.remote_port + " (" +
+                int.remote_system_name + ")</br>";
+                
+            connectedPorts += line;
+        }
+    }
+
+    if (otherCount > 0) {
+        connectedPorts += "<b>Other connections:</b> " + otherCount
+    }
+
+    return connectedPorts != "" ? connectedPorts : ""; 
 }
 
 /**

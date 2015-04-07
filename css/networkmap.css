@@ -8,6 +8,17 @@ a:link, a:visited, a:hover, a:active {
     color: #000000;
 }
 
+div > * {
+    vertical-align: middle;
+}
+
+rect {
+    width: 24px;
+    height: 10px;
+    border: solid black 1px;
+    display: inline-block;
+}
+
 #networkmap {
     width: 75%;
     height: 100%;

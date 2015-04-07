@@ -345,9 +345,12 @@ function displayVlanInfo() {
     var vlans = document.getElementById("vlansDropDown");
     var vlan = getVlan(vlans.options[vlans.selectedIndex].value);
 
-    var info = "<b>Name:</b> " + vlan.name + "<hr>";
-//    info += "<b>Mode:</b> " + vlan.mode + "</br>";
-//    info += "<b>Status:</b> " + vlan.status + "<hr>";
+    var info = "<span><b>Name:</b> " + vlan.name + "</span><br>";
+
+    info += "<rect style='background:#FF9900;'></rect>";
+    info += "<span><b>&nbspDiffusion</b></span></br>";
+    info += "<rect style='background:#F00000;'></rect>";
+    info += "<span><b>&nbspIncoherences</b></span><hr>"
 
     document.getElementById("vlanInfo").innerHTML = info;
 
@@ -374,14 +377,23 @@ function highlightVlanDiffusion(id) {
         if (interfaceFrom != null && interfaceTo != null) {
             vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
             vlansTo = vlansIdentifiers(interfaceTo.vlans);
-            console.log(vlansFrom, vlansTo)
-            if (vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1) {
+
+            var differences = vlansTo.diff(vlansFrom)
+
+            var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1
+            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1
+
+            if (coherent) {
                 edge.width = 8;
                 edge.color = "#FF9900";
             }
-            else {
+            else if (notApplicable) {
                 edge.width = 2;
-                edge.color = undefined;
+                edge.color = undefined; 
+            }
+            else {
+                edge.width = 8;
+                edge.color = "#FF0000";
             }
         }
     }

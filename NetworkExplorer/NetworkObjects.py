@@ -8,7 +8,11 @@ Date   : Mars 2015
 
 import json
 
-SUPPORTED_DEVICES = ["HP", "ProCurve", "Juniper", "Debian", "Linux"]
+HP_DEVICES = ["HP", "Hewlett-Packard", "ProCurve"]
+JUNIPER_DEVICES = ["Juniper", "JUNOS"]
+LINUX_DEVICES = ["Linux", "Debian", "Ubuntu"]
+
+SUPPORTED_DEVICES = HP_DEVICES + JUNIPER_DEVICES + LINUX_DEVICES
 SUPPORTED_TYPES = ["bridge", "Bridge"]
 
 
@@ -61,7 +65,7 @@ class VirtualMachine(NetworkObject):
                 self.identifier != "-" and self.identifier != ""
             )
 
-class NetworkDeviceInterface(NetworkObject):
+class Interface(NetworkObject):
     def __init__(
             self,
             local_port=None,
@@ -84,7 +88,7 @@ class NetworkDeviceInterface(NetworkObject):
             )
 
 
-class NetworkDevice(NetworkObject):
+class Device(NetworkObject):
     def __init__(
             self,
             mac_address=None,
@@ -121,6 +125,5 @@ class NetworkDevice(NetworkObject):
         return \
             (
                 self.system_description is not None and
-                any(d in self.system_description for d in ["Linux", "Debian",
-                                                           "Ubuntu"])
+                any(d in self.system_description for d in LINUX_DEVICES)
             )

@@ -20,7 +20,7 @@ from multiprocessing import Process, Manager, Queue
 
 import paramiko
 
-from NetworkParser import *
+from NetworkOutputParser import *
 
 DEFAULT_TIMEOUT = 10
 DEFAULT_MAX_BYTES = 1024
@@ -31,7 +31,7 @@ DEFAULT_PASSWORD = None
 config = ConfigParser.RawConfigParser()
 
 
-class NetworkDeviceExplorer(object):
+class NetworkExplorer(object):
     def __init__(self, device):
 
         self.device = device
@@ -77,7 +77,7 @@ class NetworkDeviceExplorer(object):
         Explores a device using the LLDP protocol in order to add its valid \
         neighbors in the queue.
         :param explored_devices: The dict of the devices already explored
-        :type explored_devices: {str : NetworkDevice}
+        :type explored_devices: {str : Device}
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
@@ -90,7 +90,7 @@ class NetworkDeviceExplorer(object):
         # Determining the type of the current device from the switch prompt
         switch_prompt = self._receive_ssh_output()
 
-        self.network_parser = NetworkParser.get_parser_type(switch_prompt)
+        self.network_parser = NetworkOutputParser.get_parser_type(switch_prompt)
 
         if self.network_parser is None:
             logging.warning("Could not recognize device %s. Here is the \
@@ -135,7 +135,7 @@ class NetworkDeviceExplorer(object):
 
         neighbors_result = self._show_lldp_neighbors()
 
-        if isinstance(self.network_parser, LinuxNetworkParser):
+        if isinstance(self.network_parser, LinuxNetworkOutputParser):
             vms = self._show_virtual_machines()
             device.virtual_machines = self.network_parser.parse_vms_list(vms)
             neighbors = self.network_parser\
@@ -143,7 +143,7 @@ class NetworkDeviceExplorer(object):
             return neighbors
 
         if isinstance(self.network_parser,
-                      (HPNetworkParser, JuniperNetworkParser)):
+                      (HPNetworkOutputParser, JuniperNetworkOutputParser)):
 
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
             self._assign_vlans_to_interfaces(device.interfaces)
@@ -171,7 +171,7 @@ class NetworkDeviceExplorer(object):
         if result is None:
             return
 
-        if isinstance(self.network_parser, HPNetworkParser):
+        if isinstance(self.network_parser, HPNetworkOutputParser):
             vlans = self.network_parser.parse_vlans_from_global_info(result)
 
             for vlan in vlans:
@@ -179,7 +179,7 @@ class NetworkDeviceExplorer(object):
                 self.network_parser.associate_vlan_to_interfaces(
                     interfaces, vlan, specific_result)
 
-        elif isinstance(self.network_parser, JuniperNetworkParser):
+        elif isinstance(self.network_parser, JuniperNetworkOutputParser):
             self.network_parser.associate_vlans_to_interfaces(
                 interfaces, result)
 
@@ -361,7 +361,7 @@ def main():
     _initialize_logger(logfile)
 
     queue = Queue()
-    queue.put(NetworkDevice(system_name=source_address))
+    queue.put(Device(system_name=source_address))
 
     explored_devices = Manager().dict()
 
@@ -377,7 +377,7 @@ def main():
         if not queue.empty():  # and len(jobs) < 10:
             nextDevice = queue.get()
             p = Process(
-                target=NetworkDeviceExplorer(nextDevice).explore_lldp,
+                target=NetworkExplorer(nextDevice).explore_lldp,
                 args=(explored_devices, queue),
                 name=nextDevice.system_name)
             jobs.append(p)

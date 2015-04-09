@@ -8,8 +8,8 @@ Date   : Mars 2015
 
 import json
 
-supported_devices = ["HP", "ProCurve", "Juniper", "Debian", "Linux"]
-supported_types = ["bridge", "Bridge"]
+SUPPORTED_DEVICES = ["HP", "ProCurve", "Juniper", "Debian", "Linux"]
+SUPPORTED_TYPES = ["bridge", "Bridge"]
 
 
 class VlanMode():
@@ -22,7 +22,13 @@ class VlanStatus():
     INACTIVE = "Down"
 
 
-class Vlan(object):
+class NetworkObject(object):
+    def to_JSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__,
+                          sort_keys=False, indent=4)
+
+
+class Vlan(NetworkObject):
     def __init__(
             self,
             identifier=None,
@@ -35,12 +41,8 @@ class Vlan(object):
         self.mode = mode
         self.status = status
 
-    def to_JSON(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=False, indent=4)
 
-
-class VirtualMachine(object):
+class VirtualMachine(NetworkObject):
     def __init__(
             self,
             identifier=None,
@@ -51,12 +53,8 @@ class VirtualMachine(object):
         self.name = name
         self.state = state
 
-    def to_JSON(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=False, indent=4)
 
-
-class NetworkDeviceInterface(object):
+class NetworkDeviceInterface(NetworkObject):
     def __init__(
             self,
             local_port=None,
@@ -78,12 +76,8 @@ class NetworkDeviceInterface(object):
                 self.remote_system_name != ""
             )
 
-    def to_JSON(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=False, indent=4)
 
-
-class NetworkDevice(object):
+class NetworkDevice(NetworkObject):
     def __init__(
             self,
             mac_address=None,
@@ -107,12 +101,8 @@ class NetworkDevice(object):
         return \
             (
                 self.enabled_capabilities is not None and
-                any(t in self.enabled_capabilities for t in supported_types)
+                any(t in self.enabled_capabilities for t in SUPPORTED_TYPES)
                 and
                 self.system_description is not None and
-                any(d in self.system_description for d in supported_devices)
+                any(d in self.system_description for d in SUPPORTED_DEVICES)
             )
-
-    def to_JSON(self):
-        return json.dumps(self, default=lambda o: o.__dict__,
-                          sort_keys=False, indent=4)

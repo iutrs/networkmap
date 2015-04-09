@@ -14,9 +14,9 @@ import socket
 import argparse
 import ConfigParser
 
-import paramiko
-
 from multiprocessing import Process, Manager, Queue
+
+import paramiko
 
 from NetworkParser import *
 
@@ -71,56 +71,63 @@ class NetworkDeviceExplorer(object):
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
-        if self._open_ssh_connection():
+        try:
+            self._open_ssh_connection()
+            print("Connected to {0}.".format(self.hostname))
+        except Exception as e:
+            print("Could not open SSH connection to {0}: {1}".format(self.hostname, e))
+            return
+        
+        time.sleep(1)
 
-            #Determining the type of the current device from the switch prompt
-            switch_prompt = self._receive_ssh_output()
+        # Determining the type of the current device from the switch prompt
+        switch_prompt = self._receive_ssh_output()
 
-            self.network_parser = NetworkParser.get_parser_type(switch_prompt)
+        self.network_parser = NetworkParser.get_parser_type(switch_prompt)
 
-            if self.network_parser is None:
-                print("Could not recognize device {0}.".format(self.hostname))
-                print("Here is the switch prompt: {0}".format(switch_prompt))
-                return
+        if self.network_parser is None:
+            print("Could not recognize device {0}.".format(self.hostname))
+            print("Here is the switch prompt: {0}".format(switch_prompt))
+            return
 
-            #Parsing device from local information
-            local_info = self._show_lldp_local_device()
-            device = self.network_parser.parse_device_from_lldp_local_info(
-                local_info)
+        # Parsing device from local information
+        local_info = self._show_lldp_local_device()
+        device = self.network_parser.parse_device_from_lldp_local_info(
+            local_info)
 
-            if device is None or device.system_name is None:
-                print("Could not parse device {0}.".format(self.hostname))
-                return
+        if device is None or device.system_name is None:
+            print("Could not parse device {0}.".format(self.hostname))
+            return
 
-            # We don't need to prepare the switch anymore
-            self.prepare = False
+        # We don't need to prepare the switch anymore
+        self.prepare = False
 
-            print("Discovering lldp neighbors for {0}..."
-                  .format(device.system_name))
+        print("Discovering lldp neighbors for {0}..."
+              .format(device.system_name))
 
-            neighbors = self._get_lldp_neighbors(device)
+        neighbors = self._get_lldp_neighbors(device)
 
-            self._close_ssh_connection()
+        self._close_ssh_connection()
 
-            for neighbor in neighbors:
-                valid = neighbor.is_valid_lldp_device()
-                explored = neighbor.mac_address in explored_devices
+        for neighbor in neighbors:
+            valid = neighbor.is_valid_lldp_device()
+            explored = neighbor.mac_address in explored_devices
 
-                if valid and not explored:
-                    explored_devices[neighbor.mac_address] = neighbor
+            if valid and not explored:
+                explored_devices[neighbor.mac_address] = neighbor
 
-                    if not self._ignore(neighbor.ip_address) and \
-                       not self._ignore(neighbor.system_name):
-                        queue.put(neighbor.system_name)
+                if not self._ignore(neighbor.ip_address) and \
+                   not self._ignore(neighbor.system_name):
+                    queue.put(neighbor.system_name)
 
-            explored_devices[device.mac_address] = device
+        explored_devices[device.mac_address] = device
 
     def _get_lldp_neighbors(self, device):
 
         neighbors_result = self._show_lldp_neighbors()
 
-        if isinstance(self.network_parser, HPNetworkParser) or \
-           isinstance(self.network_parser, JuniperNetworkParser):
+        if isinstance(self.network_parser,
+            (HPNetworkParser, JuniperNetworkParser)):
 
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
             self._assign_vlans_to_interfaces(device.interfaces)
@@ -193,31 +200,15 @@ class NetworkDeviceExplorer(object):
 
     def _open_ssh_connection(self):
         """
-        Opens a SSH connection (using paramiko) with the device in order to \
+        Opens a SSH connection (using paramiko) with the device in order to 
         retrieve the output data.
-        :return: If the connection succeeded
-        :rtype: bool
         """
-        try:
-            self.ssh.connect(hostname=self.hostname,
-                             username=self.ssh_username,
-                             password=self.ssh_password,
-                             banner_timeout=5.0)
-            self.shell = self.ssh.invoke_shell()
-            self.shell.settimeout(self.ssh_timeout)
-            self.shell.set_combine_stderr(True)
-
-            print("Connected to {0}.".format(self.hostname))
-            time.sleep(1)
-
-            return True
-
-        except socket.error as se:
-            print("Error with {0}. {1}".format(self.hostname, se))
-        except paramiko.AuthenticationException as pae:
-            print("Error with {0}. {1}".format(self.hostname, pae))
-        except Exception as e:
-            print("Unexpected error with {0}. {1}".format(self.hostname, e))
+        self.ssh.connect(hostname=self.hostname,
+                         username=self.ssh_username,
+                         password=self.ssh_password)
+        self.shell = self.ssh.invoke_shell()
+        self.shell.settimeout(self.ssh_timeout)
+        self.shell.set_combine_stderr(True)
 
     def _close_ssh_connection(self):
         try:
@@ -287,11 +278,10 @@ def _write_results_to_file(results, outputfile):
         output += "{0},\n".format(value.to_JSON())
     output = output[:-2] + "]"
 
-    _file = open(outputfile, "w")
-    _file.write(output)
-    _file.close()
+    with open(outputfile, "w") as _file:
+        _file.write(output)
 
-if __name__ == "__main__":
+def main():
     args = _parse_args()
     config_file = args.config
 
@@ -299,54 +289,54 @@ if __name__ == "__main__":
         print("Could not find configuration file '{0}'.".format(config_file))
         exit()
 
+    config.read(config_file)
+
+    protocol = config.get('DEFAULT', 'Protocol')
+    source_address = config.get('DEFAULT', 'SourceAddress')
+    outputfile = config.get('DEFAULT', 'OutputFile')
+
+    queue = Queue()
+    queue.put(source_address)
+
+    explored_devices = Manager().dict()
+
+    start_time = time.time()
+
+    if protocol != "LLDP":
+        print("Unsupported protocol '{0}'.".format(protocol))
+
+    jobs = []
+
+    while True:
+        # Starting a new process for each address added in the queue
+        if not queue.empty():  # and len(jobs) < 10:
+            next_address = queue.get()
+            p = Process(
+                target=NetworkDeviceExplorer(next_address).explore_lldp,
+                args=(explored_devices, queue),
+                name=next_address)
+            jobs.append(p)
+            p.start()
+
+        # Removing every process who's finished
+        for j in jobs:
+            if not j.is_alive():
+                jobs.remove(j)
+
+        # We're done when there aren't any process left
+        if len(jobs) == 0:
+            break
+
+    if len(explored_devices) > 0:
+        _write_results_to_file(explored_devices, outputfile)
+
+        print("Found {0} device(s) in {1} second(s).".format(
+              len(explored_devices), round(time.time() - start_time, 2)))
+    else:
+        print("Could not find anything.")
+
+if __name__ == "__main__":
     try:
-        config.read(config_file)
-
-        protocol = config.get('DEFAULT', 'Protocol')
-        source_address = config.get('DEFAULT', 'SourceAddress')
-        outputfile = config.get('DEFAULT', 'OutputFile')
-
-        queue = Queue()
-        queue.put(source_address)
-
-        explored_devices = Manager().dict()
-
-        start_time = time.time()
-
-        if protocol == "LLDP":
-
-            jobs = []
-
-            while True:
-                # Starting a new process for each address added in the queue
-                if not queue.empty():  # and len(jobs) < 10:
-                    nextAddress = queue.get()
-                    p = Process(
-                        target=NetworkDeviceExplorer(nextAddress).explore_lldp,
-                        args=(explored_devices, queue),
-                        name=nextAddress)
-                    jobs.append(p)
-                    p.start()
-
-                # Removing every process who's finished
-                for j in jobs:
-                    if not j.is_alive():
-                        jobs.remove(j)
-
-                # We're done when there aren't any process left
-                if len(jobs) == 0:
-                    break
-
-        else:
-            print("Unsupported protocol '{0}'.".format(protocol))
-
-        if len(explored_devices) > 0:
-            _write_results_to_file(explored_devices, outputfile)
-
-            print("Found {0} device(s) in {1} second(s).".format(
-                  len(explored_devices), round(time.time() - start_time, 2)))
-        else:
-            print("Could not find anything.")
-
+        main()
     except ConfigParser.Error as cpe:
         print("Configuration error. {0}".format(cpe))

@@ -6,11 +6,13 @@ Auteur : Marc-Antoine Fortier
 Date   : Mars 2015
 """
 
+import re
 import os
 import sys
 import time
 import socket
 
+import logging
 import argparse
 import ConfigParser
 
@@ -20,19 +22,21 @@ from multiprocessing import Process, Manager, Queue
 
 from NetworkParser import *
 
-DEFAULT_MAX_BYTES = 2048*2048
 DEFAULT_TIMEOUT = 10
-DEFAULT_USERNAME = "admin"
-DEFAULT_PASSWORD = ""
+DEFAULT_MAX_BYTES = 1024
+DEFAULT_MAX_ATTEMPTS = 1
+DEFAULT_USERNAME = "root"
+DEFAULT_PASSWORD = None
 
 config = ConfigParser.RawConfigParser()
 
 
 class NetworkDeviceExplorer(object):
-    def __init__(self, hostname):
+    def __init__(self, device):
 
-        self.hostname = hostname
-        self.prepare = True
+        self.device = device
+        self.hostname = device.system_name
+
         self.network_parser = None
 
         self.ssh = paramiko.SSHClient()
@@ -44,23 +48,29 @@ class NetworkDeviceExplorer(object):
 
         self.ssh_timeout = DEFAULT_TIMEOUT
         self.ssh_max_bytes = DEFAULT_MAX_BYTES
+        self.ssh_max_attempts = DEFAULT_MAX_ATTEMPTS
+        self.attempts_count = 0
 
         self.ssh_username = DEFAULT_USERNAME
         self.ssh_password = DEFAULT_PASSWORD
+        self.ssh_private_key = None
 
         try:
             self.ignore_list = config.get('DEFAULT', 'Ignore').split()
 
             self.ssh_timeout = config.getfloat('SSH', 'Timeout')
             self.ssh_max_bytes = config.getint('SSH', 'MaximumBytesToReceive')
+            self.ssh_max_attempts = config.getint('SSH', 'MaximumAttempts')
 
             self.ssh_username = config.get('SSH', 'Username')
             self.ssh_password = config.get('SSH', 'Password')
+            self.ssh_private_key = paramiko.RSAKey.from_private_key_file(
+                config.get('SSH', 'PathToPrivateKey'))
 
         except ConfigParser.Error as cpe:
-            print("Configuration error: {0}".format(cpe))
+            logging.error("Configuration error: %s", cpe)
         except Exception as e:
-            print("Unexpected error: {0}".format(e))
+            logging.error("Unexpected error: %s", e)
 
     def explore_lldp(self, explored_devices, queue):
         """
@@ -71,36 +81,36 @@ class NetworkDeviceExplorer(object):
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
-        if self._open_ssh_connection():
 
-            #Determining the type of the current device from the switch prompt
+        if self._open_ssh_connection():
+            # Determining the type of the current device from the switch prompt
             switch_prompt = self._receive_ssh_output()
 
             self.network_parser = NetworkParser.get_parser_type(switch_prompt)
 
             if self.network_parser is None:
-                print("Could not recognize device {0}.".format(self.hostname))
-                print("Here is the switch prompt: {0}".format(switch_prompt))
+                logging.warning("Could not recognize device %s. Here is the \
+                    switch prompt: %s", self.hostname, switch_prompt)
                 return
 
-            #Parsing device from local information
-            local_info = self._show_lldp_local_device()
-            device = self.network_parser.parse_device_from_lldp_local_info(
-                local_info)
+            # Sending preparation commands to switch
+            self._prepare_switch()
 
-            if device is None or device.system_name is None:
-                print("Could not parse device {0}.".format(self.hostname))
+            # Building current device's informations if missing
+            if self.device is None or self.device.mac_address is None:
+                self.device = self._build_current_device()
+
+            if self.device is None or self.device.mac_address is None:
+                logging.warning("Could not parse device %s.", self.hostname)
                 return
 
-            # We don't need to prepare the switch anymore
-            self.prepare = False
+            logging.info("Discovering lldp neighbors for %s...", self.hostname)
 
-            print("Discovering lldp neighbors for {0}..."
-                  .format(device.system_name))
-
-            neighbors = self._get_lldp_neighbors(device)
+            neighbors = self._get_lldp_neighbors(self.device)
 
             self._close_ssh_connection()
+
+            explored_devices[self.device.mac_address] = self.device
 
             for neighbor in neighbors:
                 valid = neighbor.is_valid_lldp_device()
@@ -111,17 +121,25 @@ class NetworkDeviceExplorer(object):
 
                     if not self._ignore(neighbor.ip_address) and \
                        not self._ignore(neighbor.system_name):
-                        queue.put(neighbor.system_name)
+                        queue.put(neighbor)
 
-            explored_devices[device.mac_address] = device
+    def _build_current_device(self):
+        info = self._show_lldp_local_device()
+        return self.network_parser.parse_device_from_lldp_local_info(info)
 
     def _get_lldp_neighbors(self, device):
 
         neighbors_result = self._show_lldp_neighbors()
 
+        if isinstance(self.network_parser, LinuxNetworkParser):
+            vms = self._show_virtual_machines()
+            device.virtual_machines = self.network_parser.parse_vms_list(vms)
+            neighbors = self.network_parser\
+                .parse_devices_from_lldp_remote_info(device, neighbors_result)
+            return neighbors
+
         if isinstance(self.network_parser, HPNetworkParser) or \
            isinstance(self.network_parser, JuniperNetworkParser):
-
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
             self._assign_vlans_to_interfaces(device.interfaces)
 
@@ -135,14 +153,8 @@ class NetworkDeviceExplorer(object):
                     if partial_result is not None:
                         neighbors_result += partial_result
 
-        elif isinstance(self.network_parser, LinuxNetworkParser):
-            pass
-            # TODO
-            vms = self._show_vms()
-            device.virtual_machines = self.network_parser.parse_vms_list(vms)
-
-        return self.network_parser\
-            .parse_devices_from_lldp_remote_info(neighbors_result)
+            return self.network_parser\
+                .parse_devices_from_lldp_remote_info(neighbors_result)
 
     def _get_lldp_interfaces(self, lldp_result):
         interfaces = self.network_parser\
@@ -159,7 +171,6 @@ class NetworkDeviceExplorer(object):
 
             for vlan in vlans:
                 specific_result = self._show_vlan_detail(vlan.identifier)
-
                 self.network_parser.associate_vlan_to_interfaces(
                     interfaces, vlan, specific_result)
 
@@ -187,45 +198,62 @@ class NetworkDeviceExplorer(object):
         command = self.network_parser.vlans_specific_cmd.format(vlan_id)
         return self._send_ssh_command(command)
 
-    def _show_vms(self):
+    def _show_virtual_machines(self):
         command = self.network_parser.vms_list_cmd
         return self._send_ssh_command(command)
 
     def _open_ssh_connection(self):
         """
-        Opens a SSH connection (using paramiko) with the device in order to \
-        retrieve the output data.
-        :return: If the connection succeeded
+        Opens a SSH connection (using paramiko) with the devices
+        :param default: Using the default values for connection
+        :type queue: bool
+        :return: True if the connection succeeded
         :rtype: bool
         """
+        self.attempts_count += 1
+
         try:
+            username = self.ssh_username
+            password = self.ssh_password
+            pkey = None
+
+            if self.device.is_linux_server():
+                username = DEFAULT_USERNAME
+                password = DEFAULT_PASSWORD
+                pkey = self.ssh_private_key
+
             self.ssh.connect(hostname=self.hostname,
-                             username=self.ssh_username,
-                             password=self.ssh_password,
-                             banner_timeout=5.0)
+                             username=username,
+                             password=password,
+                             pkey=pkey,
+                             timeout=self.ssh_timeout)
             self.shell = self.ssh.invoke_shell()
-            self.shell.settimeout(self.ssh_timeout)
             self.shell.set_combine_stderr(True)
 
-            print("Connected to {0}.".format(self.hostname))
+            logging.info("Connected to %s.", self.hostname)
             time.sleep(1)
 
             return True
 
-        except socket.error as se:
-            print("Error with {0}. {1}".format(self.hostname, se))
         except paramiko.AuthenticationException as pae:
-            print("Error with {0}. {1}".format(self.hostname, pae))
+            # Retry a new connection with custom values
+            if self.attempts_count < self.ssh_max_attempts:
+                logging.debug("Authentication failed with %s.", self.hostname)
+                return self._open_ssh_connection()
+            else:
+                logging.warning("Error with %s. %s", self.hostname, pae)
+
         except Exception as e:
-            print("Unexpected error with {0}. {1}".format(self.hostname, e))
+            logging.warning("Error with %s. %s", self.hostname, e)
 
     def _close_ssh_connection(self):
         try:
             self.shell.close()
             self.ssh.close()
+            logging.debug("Closed connection with %s.", self.hostname)
         except Exception as e:
-            print("Could not close ssh connection with {0}. {1}"
-                  .format(self.hostname, e))
+            logging.warning("Could not close ssh connection with %s. %s",
+                            self.hostname, e)
 
     def _send_ssh_command(self, command):
         """
@@ -236,11 +264,8 @@ class NetworkDeviceExplorer(object):
         :rtype: str
         """
         try:
-            if self.prepare:
-                self._prepare_switch()
-                self._receive_ssh_output()
 
-#            print("Executing command '{0}'...".format(command.rstrip()))
+            logging.debug("Executing command '%s'...", command.rstrip())
             self.shell.send(command)
 
             receive_buffer = ""
@@ -251,26 +276,30 @@ class NetworkDeviceExplorer(object):
 
             return receive_buffer
 
-        except socket.error as se:
-            print("Socket error with {0}. {1}".format(self.hostname, se))
         except Exception as e:
-            print("Unexpected error with {0}. {1}".format(self.hostname, e))
+            logging.warning("Could not send command to %s. %s", self.hostname, e)
 
     def _prepare_switch(self):
         for cmd in self.network_parser.preparation_cmds:
             time.sleep(0.5)
-            self.shell.send(cmd)
+            self._send_ssh_command(cmd)
 
     def _receive_ssh_output(self):
-        time.sleep(0.1)
         if self.shell.recv_ready:
-            return self.shell.recv(self.ssh_max_bytes)
+            time.sleep(0.1)
+            raw_output = self.shell.recv(self.ssh_max_bytes)
+            clean_output = self._remove_ansi_escape_codes(raw_output)
+            return clean_output.decode('utf8')
 
     def _ignore(self, ip_address):
         for ip in self.ignore_list:
             if ip_address and ip_address.lower().startswith(ip.lower()):
                 return True
 
+    def _remove_ansi_escape_codes(self, string):
+        expression = r"\[\d{1,2}\;\d{1,2}[a-zA-Z]?\d?|\[\??\d{1,2}[a-zA-Z]"
+        ansi_escape = re.compile(expression)
+        return ansi_escape.sub('', string.replace(u"\u001b", ""))
 
 def _parse_args():
     parser = argparse.ArgumentParser(
@@ -281,72 +310,93 @@ def _parse_args():
 
     return parser.parse_args()
 
+def _initialize_logger(logfile):
+    logging.getLogger().setLevel(logging.DEBUG)
+    logging.getLogger("paramiko").setLevel(logging.WARNING)
+
+    # Console logging handler
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+
+    # File logging handler
+    handler = logging.FileHandler(logfile, "w")
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+
 def _write_results_to_file(results, outputfile):
     output = "["
     for key, value in results.items():
         output += "{0},\n".format(value.to_JSON())
     output = output[:-2] + "]"
 
-    _file = open(outputfile, "w")
-    _file.write(output)
-    _file.close()
+    with open(outputfile, "w") as _file:
+        _file.write(output.encode('utf8'))
 
-if __name__ == "__main__":
+def main():
     args = _parse_args()
     config_file = args.config
 
     if not os.path.isfile(config_file):
-        print("Could not find configuration file '{0}'.".format(config_file))
+        logging.error("Could not find configuration file '%s'.", config_file)
         exit()
 
+    config.read(config_file)
+
+    protocol = config.get('DEFAULT', 'Protocol')
+    source_address = config.get('DEFAULT', 'SourceAddress')
+    outputfile = config.get('DEFAULT', 'OutputFile')
+    logfile = config.get('DEFAULT', 'LogFile')
+
+    _initialize_logger(logfile)
+
+    queue = Queue()
+    queue.put(NetworkDevice(system_name=source_address))
+
+    explored_devices = Manager().dict()
+
+    start_time = time.time()
+
+    if protocol != "LLDP":
+        logging.error("Unsupported protocol '%s'.", protocol)
+
+    jobs = []
+
+    while True:
+        # Starting a new process for each address added in the queue
+        if not queue.empty():  # and len(jobs) < 10:
+            nextDevice = queue.get()
+            p = Process(
+                target=NetworkDeviceExplorer(nextDevice).explore_lldp,
+                args=(explored_devices, queue),
+                name=nextDevice.system_name)
+            jobs.append(p)
+            p.start()
+
+        # Removing every process who's finished
+        for j in jobs:
+            if not j.is_alive():
+                jobs.remove(j)
+
+        # We're done when there aren't any process left
+        if len(jobs) == 0:
+            break
+
+    if len(explored_devices) > 0:
+        _write_results_to_file(explored_devices, outputfile)
+
+        logging.info("Found %s device(s) in %s second(s).",
+                     len(explored_devices),
+                     round(time.time() - start_time, 2))
+    else:
+        logging.warning("Could not find anything.")
+
+if __name__ == "__main__":
     try:
-        config.read(config_file)
-
-        protocol = config.get('DEFAULT', 'Protocol')
-        source_address = config.get('DEFAULT', 'SourceAddress')
-        outputfile = config.get('DEFAULT', 'OutputFile')
-
-        queue = Queue()
-        queue.put(source_address)
-
-        explored_devices = Manager().dict()
-
-        start_time = time.time()
-
-        if protocol == "LLDP":
-
-            jobs = []
-
-            while True:
-                # Starting a new process for each address added in the queue
-                if not queue.empty():  # and len(jobs) < 10:
-                    nextAddress = queue.get()
-                    p = Process(
-                        target=NetworkDeviceExplorer(nextAddress).explore_lldp,
-                        args=(explored_devices, queue),
-                        name=nextAddress)
-                    jobs.append(p)
-                    p.start()
-
-                # Removing every process who's finished
-                for j in jobs:
-                    if not j.is_alive():
-                        jobs.remove(j)
-
-                # We're done when there aren't any process left
-                if len(jobs) == 0:
-                    break
-
-        else:
-            print("Unsupported protocol '{0}'.".format(protocol))
-
-        if len(explored_devices) > 0:
-            _write_results_to_file(explored_devices, outputfile)
-
-            print("Found {0} device(s) in {1} second(s).".format(
-                  len(explored_devices), round(time.time() - start_time, 2)))
-        else:
-            print("Could not find anything.")
-
+        main()
     except ConfigParser.Error as cpe:
-        print("Configuration error. {0}".format(cpe))
+        logging.error("Configuration error. %s", cpe)

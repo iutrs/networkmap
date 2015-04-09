@@ -11,14 +11,22 @@ $.getJSON(jsonFile, function(json) {
     devices = json;
 });
 
-// Arrays used by vis to generate the network graph
+// The objects used by vis
+var network = null;
 var nodes = []
 var edges = []
 
 // Arrays used to keep information in memory
 var myVlans = []
 
-var network = null;
+// Objects colors (for further customization)
+var linkDefaultColor = undefined
+var vlanDiffusionColor = "#FF9900"
+var vlanIncoherenceColor = "#FF0000"
+
+var nodeDefaultColor = "#2B7CE9"
+var unaccessibleSwitchColor = "#C5000B"
+var serverDefaultColor = "#00FFBF"
 
 function draw() {
 
@@ -37,6 +45,7 @@ function draw() {
 
     var options = {
         stabilize: true,
+        navigation: true,
         selectable: true,
         smoothCurves: false,
         physics: {
@@ -74,7 +83,11 @@ function createNodes() {
     for (var i = 0; i < devices.length; i++) {
         var device = devices[i]
 
-        var color = device.interfaces.length == 0 ? '#C5000B' : '#2B7CE9';
+        var color = nodeDefaultColor;
+
+        if (device.interfaces.length == 0) {
+            color = unaccessibleSwitchColor;
+        }
 
         nodes.push(
         {
@@ -115,7 +128,7 @@ function createEdges() {
                         'labelAlignment' : 'line-center'
                     });
             }
-            
+
             for (var k = 0; k < int.vlans.length; k++) {
                 var vlan = int.vlans[k]
                 if (!vlanExists(vlan)) {
@@ -201,15 +214,14 @@ function buildConnectedPortsList(device) {
 
     for (var i = 0; i < device.interfaces.length; i++) {
         var int = device.interfaces[i];
-        
+
         if (int.remote_system_name == "") {
             otherCount++;
         }
         else {
-            var line = int.local_port + " --> " + 
-                int.remote_port + " (" +
-                int.remote_system_name + ")</br>";
-                
+            var line = int.local_port + " --> ";
+            line += int.remote_port + " (";
+            line += int.remote_system_name + ")</br>";
             connectedPorts += line;
         }
     }
@@ -279,7 +291,7 @@ function vlansToString(vlans, str, differences) {
     for (var i = 0; i < vlans.length; i++) {
         var vlan = vlans[i]
 
-        var color = (differences.indexOf(vlan.identifier) >= 0) ? "red" : "black"
+        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black"
 
         var ref = str + "/vlan" + vlan.identifier
         string += vlansInfo(vlan, ref, color)
@@ -294,9 +306,9 @@ function vlansToString(vlans, str, differences) {
 function vlansInfo(vlan, ref, color) {
     // tooltip
     var string = "<a href='#" + ref + "' title='"
-    string += " Name: " + vlan.name + "\n";
-    string += " Mode: " + vlan.mode + "\n";
-    string += " Status: " + vlan.status + "'";
+    string += "Name: " + vlan.name + "\n";
+    string += "Mode: " + vlan.mode + "\n";
+    string += "Status: " + vlan.status + "'";
 
     // <div> toggle
     string += " onclick=\"toggle('" + ref + "');\">"
@@ -330,7 +342,8 @@ function toggle(divId) {
 function createVlansList() {
     var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>"
     for (var i = 0; i < myVlans.length; i++) {
-        options += "<option value='" + myVlans[i].identifier + "'>" + myVlans[i].identifier + "</option>";
+        options += "<option value='" + myVlans[i].identifier + "'>";
+        options += myVlans[i].identifier + "</option>";
     }
     options += "</select></br>";
     document.getElementById("vlanSelect").innerHTML = options;
@@ -347,9 +360,9 @@ function displayVlanInfo() {
 
     var info = "<span><b>Name:</b> " + vlan.name + "</span><br>";
 
-    info += "<rect style='background:#FF9900;'></rect>";
+    info += "<rect style='background:" + vlanDiffusionColor + ";'></rect>";
     info += "<span><b>&nbspDiffusion</b></span></br>";
-    info += "<rect style='background:#F00000;'></rect>";
+    info += "<rect style='background:" + vlanIncoherenceColor + ";'></rect>";
     info += "<span><b>&nbspIncoherences</b></span><hr>"
 
     document.getElementById("vlanInfo").innerHTML = info;
@@ -378,22 +391,20 @@ function highlightVlanDiffusion(id) {
             vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
             vlansTo = vlansIdentifiers(interfaceTo.vlans);
 
-            var differences = vlansTo.diff(vlansFrom)
-
             var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1
             var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1
 
             if (coherent) {
                 edge.width = 8;
-                edge.color = "#FF9900";
+                edge.color = vlanDiffusionColor;
             }
             else if (notApplicable) {
                 edge.width = 2;
-                edge.color = undefined; 
+                edge.color = linkDefaultColor; 
             }
             else {
                 edge.width = 8;
-                edge.color = "#FF0000";
+                edge.color = vlanIncoherenceColor;
             }
         }
     }

@@ -16,9 +16,9 @@ import logging
 import argparse
 import ConfigParser
 
-import paramiko
-
 from multiprocessing import Process, Manager, Queue
+
+import paramiko
 
 from NetworkParser import *
 
@@ -82,46 +82,50 @@ class NetworkDeviceExplorer(object):
         :type queue: Queue()
         """
 
-        if self._open_ssh_connection():
-            # Determining the type of the current device from the switch prompt
-            switch_prompt = self._receive_ssh_output()
+        if not self._open_ssh_connection():
+            return
 
-            self.network_parser = NetworkParser.get_parser_type(switch_prompt)
+        time.sleep(1)
 
-            if self.network_parser is None:
-                logging.warning("Could not recognize device %s. Here is the \
-                    switch prompt: %s", self.hostname, switch_prompt)
-                return
+        # Determining the type of the current device from the switch prompt
+        switch_prompt = self._receive_ssh_output()
 
-            # Sending preparation commands to switch
-            self._prepare_switch()
+        self.network_parser = NetworkParser.get_parser_type(switch_prompt)
 
-            # Building current device's informations if missing
-            if self.device is None or self.device.mac_address is None:
-                self.device = self._build_current_device()
+        if self.network_parser is None:
+            logging.warning("Could not recognize device %s. Here is the \
+                switch prompt: %s", self.hostname, switch_prompt)
+            return
 
-            if self.device is None or self.device.mac_address is None:
-                logging.warning("Could not parse device %s.", self.hostname)
-                return
+        # Sending preparation commands to switch
+        self._prepare_switch()
 
-            logging.info("Discovering lldp neighbors for %s...", self.hostname)
+        # Building current device's informations if missing
+        if self.device is None or self.device.mac_address is None:
+            self.device = self._build_current_device()
 
-            neighbors = self._get_lldp_neighbors(self.device)
+        if self.device is None or self.device.mac_address is None:
+            logging.warning("Could not parse device %s.", self.hostname)
+            return
 
-            self._close_ssh_connection()
+        logging.info("Discovering lldp neighbors for %s...", self.hostname)
 
-            explored_devices[self.device.mac_address] = self.device
+        neighbors = self._get_lldp_neighbors(self.device)
 
-            for neighbor in neighbors:
-                valid = neighbor.is_valid_lldp_device()
-                explored = neighbor.mac_address in explored_devices
+        self._close_ssh_connection()
 
-                if valid and not explored:
-                    explored_devices[neighbor.mac_address] = neighbor
+        explored_devices[self.device.mac_address] = self.device
 
-                    if not self._ignore(neighbor.ip_address) and \
-                       not self._ignore(neighbor.system_name):
-                        queue.put(neighbor)
+        for neighbor in neighbors:
+            valid = neighbor.is_valid_lldp_device()
+            explored = neighbor.mac_address in explored_devices
+
+            if valid and not explored:
+                explored_devices[neighbor.mac_address] = neighbor
+
+                if not self._ignore(neighbor.ip_address) and \
+                   not self._ignore(neighbor.system_name):
+                    queue.put(neighbor)
 
     def _build_current_device(self):
         info = self._show_lldp_local_device()
@@ -138,8 +142,9 @@ class NetworkDeviceExplorer(object):
                 .parse_devices_from_lldp_remote_info(device, neighbors_result)
             return neighbors
 
-        if isinstance(self.network_parser, HPNetworkParser) or \
-           isinstance(self.network_parser, JuniperNetworkParser):
+        if isinstance(self.network_parser,
+                      (HPNetworkParser, JuniperNetworkParser)):
+
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
             self._assign_vlans_to_interfaces(device.interfaces)
 
@@ -277,7 +282,8 @@ class NetworkDeviceExplorer(object):
             return receive_buffer
 
         except Exception as e:
-            logging.warning("Could not send command to %s. %s", self.hostname, e)
+            logging.warning("Could not send command to %s. %s",
+                            self.hostname, e)
 
     def _prepare_switch(self):
         for cmd in self.network_parser.preparation_cmds:
@@ -394,6 +400,7 @@ def main():
                      round(time.time() - start_time, 2))
     else:
         logging.warning("Could not find anything.")
+
 
 if __name__ == "__main__":
     try:

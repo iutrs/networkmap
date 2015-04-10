@@ -71,13 +71,12 @@ def _initialize_logger(logfile):
     logging.getLogger().addHandler(handler)
 
     # File logging handler
-    if not logfile:
-        return
-    handler = logging.FileHandler(logfile, "w")
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
+    if logfile:
+        handler = logging.FileHandler(logfile, "w")
+        handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter("%(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
 
 
 def _write_results_to_file(results, outputfile):

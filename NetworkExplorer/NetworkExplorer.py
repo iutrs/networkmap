@@ -185,8 +185,6 @@ class NetworkExplorer(object):
     def _open_ssh_connection(self):
         """
         Opens a SSH connection (using paramiko) with the devices
-        :param default: Using the default values for connection
-        :type queue: bool
         :return: True if the connection succeeded
         :rtype: bool
         """

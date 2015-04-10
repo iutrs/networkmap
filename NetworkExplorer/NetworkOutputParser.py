@@ -29,7 +29,12 @@ class NetworkOutputParser(object):
 
     @staticmethod
     def assign_vlan_to_interface(vlan, interface):
-        #Add the vlan to the interface if it doesnt already exists
+        """Add the vlan to the interface if it doesnt already exists.
+        :param vlan: The vlan to be assign
+        :type vlan: Vlan()
+        :param vlan: The interface
+        :type interface: Interface()
+        """
         for v in interface.vlans:
             if v.identifier == vlan.identifier:
                 return
@@ -38,6 +43,13 @@ class NetworkOutputParser(object):
 
     @staticmethod
     def extract_key_and_value_from_line(line):
+        """Substring the key and the value separated from the first
+         occurrence of ':' in the provided string
+        :param line: The line as a string
+        :type line: str
+        :return: The extracted key and value
+        :rtype: (str, str)
+        """
         tokens = line.split(':', 1)
         key = tokens[0].strip()
         value = tokens[1].strip()
@@ -46,6 +58,7 @@ class NetworkOutputParser(object):
 
 
 class HPNetworkOutputParser(NetworkOutputParser):
+    """Parses the output of Hewlett-Packard switches."""
     def __init__(self):
         self.wait_string = "#"
         self.preparation_cmds = ["\n", "no page\n"]
@@ -104,7 +117,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
         try:
             for line in lldp_result.splitlines():
                 if len(line) > 57 and line[12] == '|':
-                    interface = self.parse_interface_from_line(line)
+                    interface = self._parse_interface_from_line(line)
                     if interface.local_port != 'LocalPort':
                         interfaces.append(interface)
         except Exception as e:
@@ -113,7 +126,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
         return interfaces
 
-    def parse_interface_from_line(self, line):
+    def _parse_interface_from_line(self, line):
 
         local_port = line[:11].strip()
         chassis_id = line[13:38].strip()
@@ -237,6 +250,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
 
 class JuniperNetworkOutputParser(NetworkOutputParser):
+    """Parses the output of Juniper switches."""
     def __init__(self):
         self.wait_string = ">"
         self.preparation_cmds = ["set cli screen-length 0\n",
@@ -416,6 +430,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
 
 class LinuxNetworkOutputParser(NetworkOutputParser):
+    """Parses the output of Linux servers."""
     def __init__(self):
         self.wait_string = "#"
         self.preparation_cmds = []
@@ -481,7 +496,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         elif "PortDescr" in key:
             interface.remote_port = value
         elif "VLAN" in key:
-            tokens = value.split()
+            tokens = value.replace(',', '').split()
             vlan = Vlan(identifier=tokens[0], name=tokens[1])
             self._assign_vlan_to_interface(vlan, interface)
         else:
@@ -492,13 +507,13 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         try:
             name_index = None
             state_index = None
-            targets = [u"Name", u"State"]
+            targets_en = [u"Name", u"State"]
             targets_fr = [u"Nom", u"État"]
 
             for line in vm_result.splitlines():
-                if all(t in line for t in targets):
-                    name_index = line.find(targets[0])
-                    state_index = line.find(targets[1])
+                if all(t in line for t in targets_en):
+                    name_index = line.find(targets_en[0])
+                    state_index = line.find(targets_en[1])
 
                 elif all(t in line for t in targets_fr):
                     name_index = line.find(targets_fr[0])

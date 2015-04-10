@@ -65,6 +65,7 @@ class VirtualMachine(NetworkObject):
                 self.identifier != "-" and self.identifier != ""
             )
 
+
 class Interface(NetworkObject):
     def __init__(
             self,

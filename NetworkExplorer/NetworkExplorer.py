@@ -7,14 +7,9 @@ Date   : Mars 2015
 """
 
 import re
-import os
-import sys
 import time
 import socket
-
 import logging
-import argparse
-import ConfigParser
 
 from multiprocessing import Process, Manager, Queue
 
@@ -28,49 +23,36 @@ DEFAULT_MAX_ATTEMPTS = 1
 DEFAULT_USERNAME = "root"
 DEFAULT_PASSWORD = None
 
-config = ConfigParser.RawConfigParser()
-
 
 class NetworkExplorer(object):
-    def __init__(self, device):
+    def __init__(self,
+                 device,
+                 ignore_list=(),
+                 ssh_timeout=DEFAULT_TIMEOUT,
+                 ssh_max_bytes=DEFAULT_MAX_BYTES,
+                 ssh_max_attempts=DEFAULT_MAX_ATTEMPTS,
+                 ssh_username=DEFAULT_USERNAME,
+                 ssh_password=DEFAULT_PASSWORD,
+                 ssh_private_key=None):
+
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.shell = None
+
+        self.attempts_count = 0
+        self.network_parser = None
 
         self.device = device
         self.hostname = device.system_name
 
-        self.network_parser = None
+        self.ignore_list = ignore_list
 
-        self.ssh = paramiko.SSHClient()
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        self.shell = None
-
-        self.ignore_list = ()
-
-        self.ssh_timeout = DEFAULT_TIMEOUT
-        self.ssh_max_bytes = DEFAULT_MAX_BYTES
-        self.ssh_max_attempts = DEFAULT_MAX_ATTEMPTS
-        self.attempts_count = 0
-
-        self.ssh_username = DEFAULT_USERNAME
-        self.ssh_password = DEFAULT_PASSWORD
-        self.ssh_private_key = None
-
-        try:
-            self.ignore_list = config.get('DEFAULT', 'Ignore').split()
-
-            self.ssh_timeout = config.getfloat('SSH', 'Timeout')
-            self.ssh_max_bytes = config.getint('SSH', 'MaximumBytesToReceive')
-            self.ssh_max_attempts = config.getint('SSH', 'MaximumAttempts')
-
-            self.ssh_username = config.get('SSH', 'Username')
-            self.ssh_password = config.get('SSH', 'Password')
-            self.ssh_private_key = paramiko.RSAKey.from_private_key_file(
-                config.get('SSH', 'PathToPrivateKey'))
-
-        except ConfigParser.Error as cpe:
-            logging.error("Configuration error: %s", cpe)
-        except Exception as e:
-            logging.error("Unexpected error: %s", e)
+        self.ssh_timeout = ssh_timeout
+        self.ssh_max_bytes = ssh_max_bytes
+        self.ssh_max_attempts = ssh_max_attempts
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
+        self.ssh_private_key = ssh_private_key
 
     def explore_lldp(self, explored_devices, queue):
         """
@@ -85,19 +67,16 @@ class NetworkExplorer(object):
         if not self._open_ssh_connection():
             return
 
-        time.sleep(1)
-
-        # Determining the type of the current device from the switch prompt
-        switch_prompt = self._receive_ssh_output()
-
-        self.network_parser = NetworkOutputParser.get_parser_type(switch_prompt)
+        # Determining the type of the current device from the switch banner
+        banner = self._receive_ssh_output()
+        self.network_parser = NetworkOutputParser.get_parser_type(banner)
 
         if self.network_parser is None:
             logging.warning("Could not recognize device %s. Here is the \
                 switch prompt: %s", self.hostname, switch_prompt)
             return
 
-        # Sending preparation commands to switch
+        # Preparing the switch, such as removing pagination
         self._prepare_switch()
 
         # Building current device's informations if missing
@@ -142,7 +121,7 @@ class NetworkExplorer(object):
                 .parse_devices_from_lldp_remote_info(device, neighbors_result)
             return neighbors
 
-        if isinstance(self.network_parser,
+        elif isinstance(self.network_parser,
                       (HPNetworkOutputParser, JuniperNetworkOutputParser)):
 
             device.interfaces = self._get_lldp_interfaces(neighbors_result)
@@ -241,7 +220,6 @@ class NetworkExplorer(object):
             return True
 
         except paramiko.AuthenticationException as pae:
-            # Retry a new connection with custom values
             if self.attempts_count < self.ssh_max_attempts:
                 logging.debug("Authentication failed with %s.", self.hostname)
                 return self._open_ssh_connection()
@@ -269,7 +247,6 @@ class NetworkExplorer(object):
         :rtype: str
         """
         try:
-
             logging.debug("Executing command '%s'...", command.rstrip())
             self.shell.send(command)
 
@@ -306,104 +283,3 @@ class NetworkExplorer(object):
         expression = r"\[\d{1,2}\;\d{1,2}[a-zA-Z]?\d?|\[\??\d{1,2}[a-zA-Z]"
         ansi_escape = re.compile(expression)
         return ansi_escape.sub('', string.replace(u"\u001b", ""))
-
-def _parse_args():
-    parser = argparse.ArgumentParser(
-        description="This program dynamically generates documentation for \
-        the topology of a computing network by exploring every connected \
-        switch using the LLDP protocol.")
-    parser.add_argument("config", help="The configuration file.", type=str)
-
-    return parser.parse_args()
-
-def _initialize_logger(logfile):
-    logging.getLogger().setLevel(logging.DEBUG)
-    logging.getLogger("paramiko").setLevel(logging.WARNING)
-
-    # Console logging handler
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(message)s")
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
-
-    # File logging handler
-    handler = logging.FileHandler(logfile, "w")
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logging.getLogger().addHandler(handler)
-
-def _write_results_to_file(results, outputfile):
-    output = "["
-    for key, value in results.items():
-        output += "{0},\n".format(value.to_JSON())
-    output = output[:-2] + "]"
-
-    with open(outputfile, "w") as _file:
-        _file.write(output.encode('utf8'))
-
-def main():
-    args = _parse_args()
-    config_file = args.config
-
-    if not os.path.isfile(config_file):
-        logging.error("Could not find configuration file '%s'.", config_file)
-        exit()
-
-    config.read(config_file)
-
-    protocol = config.get('DEFAULT', 'Protocol')
-    source_address = config.get('DEFAULT', 'SourceAddress')
-    outputfile = config.get('DEFAULT', 'OutputFile')
-    logfile = config.get('DEFAULT', 'LogFile')
-
-    _initialize_logger(logfile)
-
-    queue = Queue()
-    queue.put(Device(system_name=source_address))
-
-    explored_devices = Manager().dict()
-
-    start_time = time.time()
-
-    if protocol != "LLDP":
-        logging.error("Unsupported protocol '%s'.", protocol)
-
-    jobs = []
-
-    while True:
-        # Starting a new process for each address added in the queue
-        if not queue.empty():  # and len(jobs) < 10:
-            nextDevice = queue.get()
-            p = Process(
-                target=NetworkExplorer(nextDevice).explore_lldp,
-                args=(explored_devices, queue),
-                name=nextDevice.system_name)
-            jobs.append(p)
-            p.start()
-
-        # Removing every process who's finished
-        for j in jobs:
-            if not j.is_alive():
-                jobs.remove(j)
-
-        # We're done when there aren't any process left
-        if len(jobs) == 0:
-            break
-
-    if len(explored_devices) > 0:
-        _write_results_to_file(explored_devices, outputfile)
-
-        logging.info("Found %s device(s) in %s second(s).",
-                     len(explored_devices),
-                     round(time.time() - start_time, 2))
-    else:
-        logging.warning("Could not find anything.")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except ConfigParser.Error as cpe:
-        logging.error("Configuration error. %s", cpe)

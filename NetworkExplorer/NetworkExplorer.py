@@ -118,8 +118,6 @@ class NetworkExplorer(object):
         neighbors_result = self._show_lldp_neighbors()
         device.interfaces = self._get_lldp_interfaces(neighbors_result)
 
-        self._assign_vlans_to_interfaces(device.interfaces)
-
         if len(device.interfaces) > 0:
             neighbors_result = ""
 
@@ -139,6 +137,9 @@ class NetworkExplorer(object):
     def _get_lldp_interfaces(self, lldp_result):
         interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(lldp_result)
+
+        self._assign_vlans_to_interfaces(interfaces)
+
         return interfaces
 
     def _assign_vlans_to_interfaces(self, interfaces):
@@ -146,17 +147,16 @@ class NetworkExplorer(object):
         if result is None:
             return
 
-        if isinstance(self.network_parser, HPNetworkOutputParser):
-            vlans = self.network_parser.parse_vlans_from_global_info(result)
+        vlans = self.network_parser.parse_vlans_from_global_info(result)
 
-            for vlan in vlans:
-                specific_result = self._show_vlan_detail(vlan.identifier)
-                self.network_parser.associate_vlan_to_interfaces(
-                    interfaces, vlan, specific_result)
-
-        elif isinstance(self.network_parser, JuniperNetworkOutputParser):
+        if len(vlans) == 0:
             self.network_parser.associate_vlans_to_interfaces(
                 interfaces, result)
+
+        for vlan in vlans:
+            specific_result = self._show_vlan_detail(vlan.identifier)
+            self.network_parser.associate_vlan_to_interfaces(
+                interfaces, vlan, specific_result)
 
     def _show_lldp_local_device(self):
         command = self.network_parser.lldp_local_cmd
@@ -206,6 +206,7 @@ class NetworkExplorer(object):
                              username=username,
                              password=password,
                              pkey=pkey,
+                             look_for_keys=False,
                              timeout=self.ssh_timeout)
             self.shell = self.ssh.invoke_shell()
             self.shell.set_combine_stderr(True)

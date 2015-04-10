@@ -155,13 +155,10 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
     def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
         try:
-            if specific_result is None:
-                raise Exception
-
             mode_index = None
             unknown_index = None
             status_index = None
-            indexes = [mode_index, unknown_index, status_index]
+            indexes = [None]
 
             for line in specific_result.splitlines():
                 targets = ["Mode", "Unknown VLAN", "Status"]
@@ -170,6 +167,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
                     mode_index = line.find(targets[0])
                     unknown_index = line.find(targets[1])
                     status_index = line.find(targets[2])
+                    indexes = [mode_index, unknown_index, status_index]
 
                 elif "----" not in line and line.strip() != "" and not \
                      self.wait_string in line and \
@@ -179,14 +177,14 @@ class HPNetworkOutputParser(NetworkOutputParser):
                     vlan_mode = line[mode_index:unknown_index-1].strip()
                     vlan_status = line[status_index:].strip()
 
-                    vlan = Vlan(identifier=vlan.identifier,
+                    new_vlan = Vlan(identifier=vlan.identifier,
                                 name=vlan.name,
                                 mode=vlan_mode,
                                 status=vlan_status)
 
                     for interface in interfaces:
                         if interface.local_port == interface_id:
-                            self._assign_vlan_to_interface(vlan, interface)
+                            self._assign_vlan_to_interface(new_vlan, interface)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)",
@@ -328,6 +326,9 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
                          remote_port=port_descr,
                          remote_mac_address=chassis_id,
                          remote_system_name=sys_name)
+
+    def parse_vlans_from_global_info(self, global_result):
+        return []
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         try:

@@ -120,9 +120,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
         sys_name = line[57:].strip()
 
         return Interface(local_port=local_port,
-                                      remote_port=port_descr,
-                                      remote_mac_address=chassis_id,
-                                      remote_system_name=sys_name)
+                         remote_port=port_descr,
+                         remote_mac_address=chassis_id,
+                         remote_system_name=sys_name)
 
     def parse_vlans_from_global_info(self, global_result):
         vlans = []
@@ -160,6 +160,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
             mode_index = None
             unknown_index = None
             status_index = None
+            indexes = [mode_index, unknown_index, status_index]
 
             for line in specific_result.splitlines():
                 targets = ["Mode", "Unknown VLAN", "Status"]
@@ -169,9 +170,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
                     unknown_index = line.find(targets[1])
                     status_index = line.find(targets[2])
 
-                elif "----" not in line and all(t is not None for t in \
-                     [mode_index, unknown_index, status_index ]) and \
-                     line.strip() != "" and not self.wait_string in line:
+                elif "----" not in line and line.strip() != "" and not \
+                     self.wait_string in line and \
+                     all(t is not None for t in indexes):
 
                     interface_id = line[:mode_index-1].strip()
                     vlan_mode = line[mode_index:unknown_index-1].strip()
@@ -318,9 +319,9 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         sys_name = line[72:].strip()
 
         return Interface(local_port=local_port,
-                                      remote_port=port_descr,
-                                      remote_mac_address=chassis_id,
-                                      remote_system_name=sys_name)
+                         remote_port=port_descr,
+                         remote_mac_address=chassis_id,
+                         remote_system_name=sys_name)
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         try:

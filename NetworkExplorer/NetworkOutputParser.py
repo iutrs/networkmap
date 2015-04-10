@@ -54,6 +54,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
         self.lldp_neighbors_detail_cmd = "show lldp info remote-device {0}\n"
         self.vlans_global_cmd = "show vlans\n"
         self.vlans_specific_cmd = "show vlans {0}\n"
+        self.vms_list_cmd = None
 
     def parse_device_from_lldp_local_info(self, lldp_result):
         device = Device()
@@ -75,21 +76,21 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
         return device
 
-    def parse_devices_from_lldp_remote_info(self, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, device, lldp_result):
         devices = []
 
         try:
-            device = Device()
+            neighbor = Device()
 
             for line in lldp_result.splitlines():
                 if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_remote_info(device, key, value)
+                    self.attribute_lldp_remote_info(neighbor, key, value)
 
                 elif '#' in line:
-                    devices.append(device)
-                    device = Device()
+                    devices.append(neighbor)
+                    neighbor = Device()
 
         except Exception as e:
             logging.error("Could not parse network devices from : %s. (%s)",
@@ -191,6 +192,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
             logging.error("Could not extract vlans from : %s. (%s)",
                           specific_result, e)
 
+    def parse_vms_list(self, vm_result):
+        return []
+
     def attribute_lldp_remote_info(self, device, key, value):
         if "ChassisId" in key:
             device.mac_address = value
@@ -243,6 +247,8 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         self.lldp_neighbors_cmd = "show lldp neighbors\n"
         self.lldp_neighbors_detail_cmd = "show lldp neighbors interface {0}\n"
         self.vlans_global_cmd = "show vlans detail\n"
+        self.vlans_specific_cmd = None
+        self.vms_list_cmd = None
 
     def parse_device_from_lldp_local_info(self, lldp_result):
         device = Device()
@@ -264,7 +270,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
         return device
 
-    def parse_devices_from_lldp_remote_info(self, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, device, lldp_result):
         devices = []
 
         try:
@@ -274,7 +280,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
             # which indicates a new device is starting
 
             skip_line = True
-            device = Device()
+            neighbor = Device()
 
             for line in lldp_result.splitlines():
                 if "Neighbour Information" in line:
@@ -283,11 +289,11 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
                 if ':' in line and not skip_line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_remote_info(device, key, value)
+                    self.attribute_lldp_remote_info(neighbor, key, value)
 
                 if "Address" in line and not skip_line:
-                    devices.append(device)
-                    device = Device()
+                    devices.append(neighbor)
+                    neighbor = Device()
                     skip_line = True
 
         except Exception as e:
@@ -366,6 +372,9 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
+    def parse_vms_list(self, vm_result):
+        return []
+
     def attribute_lldp_remote_info(self, device, key, value):
         if "Chassis ID" in key:
             device.mac_address = value.replace(':', ' ')
@@ -409,8 +418,11 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
     def __init__(self):
         self.wait_string = "#"
         self.preparation_cmds = []
-        self.lldp_local_cmd = "\n"
+        self.lldp_local_cmd = None
         self.lldp_neighbors_cmd = "lldpctl\n"
+        self.lldp_neighbors_detail_cmd = None
+        self.vlans_global_cmd = None
+        self.vlans_specific_cmd = None
         self.vms_list_cmd = "virsh list --all\n"
 
     def parse_device_from_lldp_local_info(self, lldp_result):
@@ -444,6 +456,9 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                           lldp_result, e)
 
         return devices
+
+    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
+        return []
 
     def attribute_lldp_remote_info(self, device, interface, key, value):
         if "Interface" in key:

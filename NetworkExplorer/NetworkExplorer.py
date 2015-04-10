@@ -112,33 +112,29 @@ class NetworkExplorer(object):
 
     def _get_lldp_neighbors(self, device):
 
+        vm_result = self._show_virtual_machines()
+        device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
+
         neighbors_result = self._show_lldp_neighbors()
+        device.interfaces = self._get_lldp_interfaces(neighbors_result)
 
-        if isinstance(self.network_parser, LinuxNetworkOutputParser):
-            vms = self._show_virtual_machines()
-            device.virtual_machines = self.network_parser.parse_vms_list(vms)
-            neighbors = self.network_parser\
-                .parse_devices_from_lldp_remote_info(device, neighbors_result)
-            return neighbors
+        self._assign_vlans_to_interfaces(device.interfaces)
 
-        elif isinstance(self.network_parser,
-                      (HPNetworkOutputParser, JuniperNetworkOutputParser)):
-
-            device.interfaces = self._get_lldp_interfaces(neighbors_result)
-            self._assign_vlans_to_interfaces(device.interfaces)
-
+        if len(device.interfaces) > 0:
             neighbors_result = ""
 
-            for interface in device.interfaces:
-                if interface.is_valid_lldp_interface():
+        for interface in device.interfaces:
+            if interface.is_valid_lldp_interface():
+                port = interface.local_port
+                partial_result = self._show_lldp_neighbor_detail(port)
 
-                    partial_result = self._show_lldp_neighbor_detail(
-                        interface.local_port)
-                    if partial_result is not None:
-                        neighbors_result += partial_result
+                if partial_result is not None:
+                    neighbors_result += partial_result
 
-            return self.network_parser\
-                .parse_devices_from_lldp_remote_info(neighbors_result)
+        neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
+            device, neighbors_result)
+
+        return neighbors
 
     def _get_lldp_interfaces(self, lldp_result):
         interfaces = self.network_parser\
@@ -246,6 +242,9 @@ class NetworkExplorer(object):
         :return: Returns the result from the command's output
         :rtype: str
         """
+        if command is None:
+            return None
+
         try:
             logging.debug("Executing command '%s'...", command.rstrip())
             self.shell.send(command)
@@ -271,8 +270,7 @@ class NetworkExplorer(object):
         if self.shell.recv_ready:
             time.sleep(0.1)
             raw_output = self.shell.recv(self.ssh_max_bytes)
-            clean_output = self._remove_ansi_escape_codes(raw_output)
-            return clean_output.decode('utf8')
+            return self._remove_ansi_escape_codes(raw_output.decode('utf8'))
 
     def _ignore(self, ip_address):
         for ip in self.ignore_list:

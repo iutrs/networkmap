@@ -18881,13 +18881,14 @@ return /******/ (function(modules) { // webpackBootstrap
 
     if (properties.from !== undefined)           {this.fromId = properties.from;}
     if (properties.to !== undefined)             {this.toId = properties.to;}
-
     if (properties.id !== undefined)             {this.id = properties.id;}
     if (properties.label !== undefined)          {this.label = properties.label; this.dirtyLabel = true;}
+    if (properties.labelFrom !== undefined)      {this.labelFrom = properties.labelFrom; this.dirtyLabel = true;}
+    if (properties.labelTo !== undefined)        {this.labelTo = properties.labelTo; this.dirtyLabel = true;}
 
-    if (properties.title !== undefined)        {this.title = properties.title;}
-    if (properties.value !== undefined)        {this.value = properties.value;}
-    if (properties.length !== undefined)       {this.physics.springLength = properties.length;}
+    if (properties.title !== undefined)          {this.title = properties.title;}
+    if (properties.value !== undefined)          {this.value = properties.value;}
+    if (properties.length !== undefined)         {this.physics.springLength = properties.length;}
 
     if (properties.color !== undefined) {
       this.options.inheritColor = false;
@@ -19110,6 +19111,28 @@ return /******/ (function(modules) { // webpackBootstrap
         }
         this._label(ctx, this.label, point.x, point.y);
       }
+      if (this.labelFrom) {
+        if (this.options.smoothCurves.enabled == true && via != null) {
+          var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+          var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+          point = {x:midpointX, y:midpointY};
+        }
+        else {
+          point = this._pointOnLine(0.3);
+        }
+        this._label(ctx, this.labelFrom, point.x, point.y);
+      }
+      if (this.labelTo) {
+        if (this.options.smoothCurves.enabled == true && via != null) {
+          var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+          var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+          point = {x:midpointX, y:midpointY};
+        }
+        else {
+          point = this._pointOnLine(0.7);
+        }
+        this._label(ctx, this.labelTo, point.x, point.y);
+      }
     }
     else {
       var x, y;
@@ -19127,8 +19150,15 @@ return /******/ (function(modules) { // webpackBootstrap
         y = node.y - node.height / 2;
       }
       this._circle(ctx, x, y, radius);
+
       point = this._pointOnCircle(x, y, radius, 0.5);
       this._label(ctx, this.label, point.x, point.y);
+
+      point = this._pointOnCircle(x, y, radius, 0.3);
+      this._label(ctx, this.labelFrom, point.x, point.y);
+
+      point = this._pointOnCircle(x, y, radius, 0.7);
+      this._label(ctx, this.labelTo, point.x, point.y);
     }
   };
 
@@ -19615,6 +19645,30 @@ return /******/ (function(modules) { // webpackBootstrap
       }
       this._label(ctx, this.label, point.x, point.y);
     }
+    if (this.labelFrom) {
+      var point;
+      if (this.options.smoothCurves.enabled == true && via != null) {
+        var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+        var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+        point = {x:midpointX, y:midpointY};
+      }
+      else {
+        point = this._pointOnLine(0.3);
+      }
+      this._label(ctx, this.labelFrom, point.x, point.y);
+    }
+    if (this.labelTo) {
+      var point;
+      if (this.options.smoothCurves.enabled == true && via != null) {
+        var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+        var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+        point = {x:midpointX, y:midpointY};
+      }
+      else {
+        point = this._pointOnLine(0.7);
+      }
+      this._label(ctx, this.labelTo, point.x, point.y);
+    }
   };
 
   /**
@@ -19685,6 +19739,33 @@ return /******/ (function(modules) { // webpackBootstrap
       if (this.label) {
         this._label(ctx, this.label, point.x, point.y);
       }
+
+      if (this.labelFrom) {
+        var point;
+        if (this.options.smoothCurves.enabled == true && via != null) {
+            var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+            var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+            point = {x:midpointX, y:midpointY};
+        }
+        else {
+            point = this._pointOnLine(0.3);
+        }
+        this._label(ctx, this.labelFrom, point.x, point.y);
+      }
+
+      if (this.labelTo) {
+        var point;
+        if (this.options.smoothCurves.enabled == true && via != null) {
+            var midpointX = 0.5*(0.5*(this.from.x + via.x) + 0.5*(this.to.x + via.x));
+            var midpointY = 0.5*(0.5*(this.from.y + via.y) + 0.5*(this.to.y + via.y));
+            point = {x:midpointX, y:midpointY};
+        }
+        else {
+            point = this._pointOnLine(0.7);
+        }
+        this._label(ctx, this.labelTo, point.x, point.y);
+      }
+
     }
     else {
       // draw circle
@@ -19716,6 +19797,14 @@ return /******/ (function(modules) { // webpackBootstrap
       if (this.label) {
         point = this._pointOnCircle(x, y, radius, 0.5);
         this._label(ctx, this.label, point.x, point.y);
+      }
+      if (this.labelFrom) {
+        point = this._pointOnCircle(x, y, radius, 0.3);
+        this._label(ctx, this.labelFrom, point.x, point.y);
+      }
+      if (this.labelTo) {
+        point = this._pointOnCircle(x, y, radius, 0.7);
+        this._label(ctx, this.labelTo, point.x, point.y);
       }
     }
   };
@@ -19842,6 +19931,26 @@ return /******/ (function(modules) { // webpackBootstrap
         }
         this._label(ctx, this.label, point.x, point.y);
       }
+      if (this.labelFrom) {
+        var point;
+        if (this.options.smoothCurves.enabled == true && via != null) {
+          point = this._pointOnBezier(0.3);
+        }
+        else {
+          point = this._pointOnLine(0.3);
+        }
+        this._label(ctx, this.labelFrom, point.x, point.y);
+      }
+      if (this.labelTo) {
+        var point;
+        if (this.options.smoothCurves.enabled == true && via != null) {
+          point = this._pointOnBezier(0.7);
+        }
+        else {
+          point = this._pointOnLine(0.7);
+        }
+        this._label(ctx, this.labelTo, point.x, point.y);
+      }
     }
     else {
       // draw circle
@@ -19884,6 +19993,16 @@ return /******/ (function(modules) { // webpackBootstrap
       if (this.label) {
         point = this._pointOnCircle(x, y, radius, 0.5);
         this._label(ctx, this.label, point.x, point.y);
+      }
+      // draw label
+      if (this.labelFrom) {
+        point = this._pointOnCircle(x, y, radius, 0.3);
+        this._label(ctx, this.labelFrom, point.x, point.y);
+      }
+      // draw label
+      if (this.labelTo) {
+        point = this._pointOnCircle(x, y, radius, 0.7);
+        this._label(ctx, this.labelTo, point.x, point.y);
       }
     }
   };

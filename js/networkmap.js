@@ -124,8 +124,8 @@ function createEdges() {
                         'length': undefined,
                         'value': undefined,
                         'title': undefined,
-                        'label': int.remote_port + " -> " + int.local_port,
-                        'labelAlignment' : 'line-center'
+                        'labelFrom': int.local_port,
+                        'labelTo': int.remote_port
                     });
             }
 
@@ -135,10 +135,9 @@ function createEdges() {
                     myVlans.push(vlan)
                 }
             }
-            myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
         }
     }
-
+    myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
 }
 
 /**

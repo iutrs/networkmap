@@ -25,6 +25,11 @@ DEFAULT_PASSWORD = None
 
 
 class NetworkExplorer(object):
+    """
+    This class will communicate with its assigned device in order to get
+    the device's networking information such as its LLDP neighbors.
+    """
+
     def __init__(self,
                  device,
                  ignore_list=(),
@@ -56,15 +61,23 @@ class NetworkExplorer(object):
 
     def explore_lldp(self, explored_devices, queue):
         """
-        Explores a device using the LLDP protocol in order to add its valid \
-        neighbors in the queue.
+        Explores a device using the LLDP protocol in order to add its \
+        valid neighbors in the queue.
+
         :param explored_devices: The dict of the devices already explored
         :type explored_devices: {str : Device}
         :param queue: The queue of the next devices to explore
         :type queue: Queue()
         """
 
-        if not self._open_ssh_connection():
+        # TODO Try new attempts when authentication fails
+        try:
+            self._open_ssh_connection()
+        except paramiko.AuthenticationException as pae:
+            logging.debug("Authentication failed with %s.", self.hostname)
+            return
+        except Exception as e:
+            logging.warning("Error with %s. %s", self.hostname, e)
             return
 
         # Determining the type of the current device from the switch banner
@@ -84,7 +97,8 @@ class NetworkExplorer(object):
             self.device = self._build_current_device()
 
         if self.device is None or self.device.mac_address is None:
-            logging.warning("Could not parse device %s.", self.hostname)
+            logging.warning("Could not build device %s from its \
+                lldp local information.", self.hostname)
             return
 
         logging.info("Discovering lldp neighbors for %s...", self.hostname)
@@ -102,21 +116,26 @@ class NetworkExplorer(object):
             if valid and not explored:
                 explored_devices[neighbor.mac_address] = neighbor
 
-                if not self._ignore(neighbor.ip_address) and \
-                   not self._ignore(neighbor.system_name):
+                if not self._ignore(neighbor):
                     queue.put(neighbor)
 
     def _build_current_device(self):
         info = self._show_lldp_local_device()
-        return self.network_parser.parse_device_from_lldp_local_info(info)
+        device = self.network_parser.parse_device_from_lldp_local_info(info)
+        return device
 
     def _get_lldp_neighbors(self, device):
-
+        """
+        Obtain the list of all ldp neighbors
+        """
         vm_result = self._show_virtual_machines()
         device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
 
         neighbors_result = self._show_lldp_neighbors()
         device.interfaces = self._get_lldp_interfaces(neighbors_result)
+
+        vlans_result = self._show_vlans()
+        self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
 
         if len(device.interfaces) > 0:
             neighbors_result = ""
@@ -135,24 +154,31 @@ class NetworkExplorer(object):
         return neighbors
 
     def _get_lldp_interfaces(self, lldp_result):
+        """
+        Obtain the list of all the lldp connected interfaces.
+        """
         interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(lldp_result)
 
-        self._assign_vlans_to_interfaces(interfaces)
-
         return interfaces
 
-    def _assign_vlans_to_interfaces(self, interfaces):
-        result = self._show_vlans()
-        if result is None:
+    def _assign_vlans_to_interfaces(self, interfaces, vlans_result):
+        """
+        Parse the vlans result and assign them to the interfaces.
+        """
+        if vlans_result is None:
             return
 
-        vlans = self.network_parser.parse_vlans_from_global_info(result)
+        vlans = self.network_parser.parse_vlans_from_global_info(vlans_result)
 
         if len(vlans) == 0:
+            # Some devices do not need to parse vlans from the global info and
+            # can assign the vlans directly to interfaces from the first result
             self.network_parser.associate_vlans_to_interfaces(
-                interfaces, result)
+                interfaces, vlans_result)
 
+        # Other devices need to get specific information form each vlan before
+        # assigning it one by one to the interfaces
         for vlan in vlans:
             specific_result = self._show_vlan_detail(vlan.identifier)
             self.network_parser.associate_vlan_to_interfaces(
@@ -184,47 +210,36 @@ class NetworkExplorer(object):
 
     def _open_ssh_connection(self):
         """
-        Opens a SSH connection (using paramiko) with the devices
-        :return: True if the connection succeeded
-        :rtype: bool
+        Opens a SSH connection with the device
         """
         self.attempts_count += 1
 
-        try:
-            username = self.ssh_username
-            password = self.ssh_password
-            pkey = None
+        username = self.ssh_username
+        password = self.ssh_password
+        pkey = None
 
-            if self.device.is_linux_server():
-                username = DEFAULT_USERNAME
-                password = DEFAULT_PASSWORD
-                pkey = self.ssh_private_key
+        if self.device.is_linux_server():
+            username = DEFAULT_USERNAME
+            password = DEFAULT_PASSWORD
+            pkey = self.ssh_private_key
 
-            self.ssh.connect(hostname=self.hostname,
-                             username=username,
-                             password=password,
-                             pkey=pkey,
-                             look_for_keys=False,
-                             timeout=self.ssh_timeout)
-            self.shell = self.ssh.invoke_shell()
-            self.shell.set_combine_stderr(True)
+        self.ssh.connect(hostname=self.hostname,
+                         username=username,
+                         password=password,
+                         pkey=pkey,
+                         look_for_keys=False,
+                         timeout=self.ssh_timeout)
+        self.shell = self.ssh.invoke_shell()
+        self.shell.set_combine_stderr(True)
 
-            logging.info("Connected to %s.", self.hostname)
-            time.sleep(1)
-
-            return True
-
-        except paramiko.AuthenticationException as pae:
-            if self.attempts_count < self.ssh_max_attempts:
-                logging.debug("Authentication failed with %s.", self.hostname)
-                return self._open_ssh_connection()
-            else:
-                logging.warning("Error with %s. %s", self.hostname, pae)
-
-        except Exception as e:
-            logging.warning("Error with %s. %s", self.hostname, e)
+        logging.info("Connected to %s.", self.hostname)
+        time.sleep(1)
 
     def _close_ssh_connection(self):
+        """
+        Closes the connection with the current device. That connection must \
+        have been opened beforehand.
+        """
         try:
             self.shell.close()
             self.ssh.close()
@@ -236,9 +251,10 @@ class NetworkExplorer(object):
     def _send_ssh_command(self, command):
         """
         Sends a command to the device in order to retrieve the output data.
+
         :param command: The command to execute (must end by a '\\n')
         :type command: str
-        :return: Returns the result from the command's output
+        :return: Returns the (clean) result from the command's output
         :rtype: str
         """
         if command is None:
@@ -261,22 +277,54 @@ class NetworkExplorer(object):
                             self.hostname, e)
 
     def _prepare_switch(self):
+        """
+        Sends the preparation commands to the device such as pressing
+        a key to skip the banner or as removing pagination.
+        """
         for cmd in self.network_parser.preparation_cmds:
             time.sleep(0.5)
             self._send_ssh_command(cmd)
 
     def _receive_ssh_output(self):
+        """
+        Receives the raw output from the device after a command has been
+        sent and cleans it before returning.
+
+        :return: Returns the cleaned output of the device
+        :rtype: str
+        """
         if self.shell.recv_ready:
             time.sleep(0.1)
             raw_output = self.shell.recv(self.ssh_max_bytes)
             return self._remove_ansi_escape_codes(raw_output.decode('utf8'))
 
-    def _ignore(self, ip_address):
-        for ip in self.ignore_list:
-            if ip_address and ip_address.lower().startswith(ip.lower()):
+    def _ignore(self, device):
+        """
+        Verifies if the device is in the ignore list.
+
+        :param device: The device to verifiy
+        :type device: Device()
+        :return: Returns whether the device should be ignored or not
+        :rtype: bool
+        """
+        ip = device.ip_address
+        name = device.system_name
+
+        for ignore in self.ignore_list:
+            if ip and ip.lower().startswith(ignore.lower()) or \
+               name and name.lower().startswith(ignore.lower()):
                 return True
 
     def _remove_ansi_escape_codes(self, string):
+        """
+        Cleans a string by removing all ANSI and VT100 escape characters
+        using a regular expression.
+
+        :param string: The string to clean
+        :type string: str
+        :return: Returns the cleaned string
+        :rtype: str
+        """
         expression = r"\[\d{1,2}\;\d{1,2}[a-zA-Z]?\d?|\[\??\d{1,2}[a-zA-Z]"
         ansi_escape = re.compile(expression)
         return ansi_escape.sub('', string.replace(u"\u001b", ""))

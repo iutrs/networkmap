@@ -191,9 +191,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
                     vlan_status = line[status_index:].strip()
 
                     new_vlan = Vlan(identifier=vlan.identifier,
-                                name=vlan.name,
-                                mode=vlan_mode,
-                                status=vlan_status)
+                                    name=vlan.name,
+                                    mode=vlan_mode,
+                                    status=vlan_status)
 
                     for interface in interfaces:
                         if interface.local_port == interface_id:

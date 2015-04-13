@@ -21,12 +21,16 @@ var myVlans = []
 
 // Objects colors (for further customization)
 var linkDefaultColor = undefined
-var vlanDiffusionColor = "#FF9900"
+var vlanDiffusionColor = "#00D000"
 var vlanIncoherenceColor = "#FF0000"
 
 var nodeDefaultColor = "#2B7CE9"
 var unaccessibleSwitchColor = "#C5000B"
 var serverDefaultColor = "#00FFBF"
+var vmDefaultColor = "#FF9900"
+
+// General options
+var showvms = false;
 
 function draw() {
 
@@ -72,6 +76,7 @@ function draw() {
     network = new vis.Network(container, data, options);
     network.freezeSimulation(true);
 
+    addGeneralOptionsControls();
     addEventsListeners();
     createVlansList();
 }
@@ -98,6 +103,43 @@ function createNodes() {
             'title': undefined,
             'value': device.interfaces.length + 1,
             'mass': device.interfaces.length + 1
+        });
+
+        if (device.virtual_machines.length > 0 && showvms) {
+            createVmsNodes(device)
+        }
+        
+    }
+}
+
+/**
+ * Add nodes and links for the virtual machines
+ */
+function createVmsNodes(device) {
+    for (var j = 0; j < device.virtual_machines.length; j++) {
+        var vm = device.virtual_machines[j];
+        nodes.push(
+        {
+            'id': device.mac_address + "/" + vm.name,
+            'label': vm.name,
+            'shape': 'square',
+            'color': vmDefaultColor,
+            'title': undefined,
+            'value': 1,
+            'mass': 1
+        });
+
+        edges.push(
+        {
+            'from': device.mac_address,
+            'to': device.mac_address + "/" + vm.name,
+            'style': 'line',
+            'color': vmDefaultColor,
+            'width': 2,
+            'length': undefined,
+            'value': undefined,
+            'title': undefined,
+            'label': vm.identifier
         });
     }
 }
@@ -138,6 +180,30 @@ function createEdges() {
         }
     }
     myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
+}
+
+/**
+ * Adding the general options
+ */
+function addGeneralOptionsControls() {
+    var content = "<input type='checkbox' name='showvms' value='showvms' "
+    content += showvms ? "checked " : " "
+    content += "onclick='toggleCheckbox(this);'> Show virtual machines <br>"
+
+    document.getElementById('general').innerHTML = content + "<hr>";
+}
+
+/**
+ * Handling checkbox clicking
+ */
+function toggleCheckbox(element)
+{
+    if (element.name == "showvms") {
+        showvms = element.checked;
+        nodes = [];
+        edges = [];
+        draw();
+    }
 }
 
 /**
@@ -407,16 +473,18 @@ function highlightVlanDiffusion(id) {
             }
         }
     }
-    
-    network.freezeSimulation(false);
-    network.setData({nodes: nodes, edges: edges});
-    network.freezeSimulation(true);
+
+    resetData();
 }
 
 /*
  * Get the interface connected from a device to another known mac address
  */
 function getInterfaceConnectedTo(device, macAdress) {
+    if (device == undefined) {
+        return null
+    }
+
     for (var i = 0; i < device.interfaces.length; i++) {
         var int = device.interfaces[i]
         if (int.remote_mac_address == macAdress) {
@@ -498,6 +566,11 @@ function edgeExists(link) {
     }
 }
 
+function resetData() {
+    network.freezeSimulation(false);
+    network.setData({nodes: nodes, edges: edges});
+    network.freezeSimulation(true);
+}
 /*
  * Returns the differences between two arrays
  */

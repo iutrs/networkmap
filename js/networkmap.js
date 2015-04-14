@@ -1,4 +1,4 @@
-const jsonFile = "devices.json"
+const jsonFile = "devices.json";
 var devices = null;
 
 // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
@@ -13,21 +13,21 @@ $.getJSON(jsonFile, function(json) {
 
 // The objects used by vis
 var network = null;
-var nodes = []
-var edges = []
+var nodes = [];
+var edges = [];
 
 // Arrays used to keep information in memory
-var myVlans = []
+var myVlans = [];
 
 // Objects colors (for further customization)
-var linkDefaultColor = undefined
-var vlanDiffusionColor = "#00D000"
-var vlanIncoherenceColor = "#FF0000"
+var linkDefaultColor = undefined;
+var vlanDiffusionColor = "#00D000";
+var vlanIncoherenceColor = "#FF0000";
 
-var nodeDefaultColor = "#2B7CE9"
-var unaccessibleSwitchColor = "#C5000B"
-var serverDefaultColor = "#00FFBF"
-var vmDefaultColor = "#FF9900"
+var nodeDefaultColor = "#2B7CE9";
+var unaccessibleSwitchColor = "#C5000B";
+var serverDefaultColor = "#00FFBF";
+var vmDefaultColor = "#FF9900";
 
 // General options
 var showvms = false;
@@ -38,8 +38,8 @@ var focusedOnNode = false;
 function draw() {
 
     if (devices == null) {
-        errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>"
-        document.getElementById('networkmap').innerHTML = errorMessage
+        errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>";
+        document.getElementById('networkmap').innerHTML = errorMessage;
     }
 
     createNodes();
@@ -92,7 +92,7 @@ function draw() {
  */
 function createNodes() {
     for (var i = 0; i < devices.length; i++) {
-        var device = devices[i]
+        var device = devices[i];
 
         var color = nodeDefaultColor;
 
@@ -106,13 +106,12 @@ function createNodes() {
             'label': device.system_name + "\n" + device.ip_address,
             'shape': 'square',
             'color': color,
-            'title': undefined,
             'value': device.interfaces.length + 1,
             'mass': device.interfaces.length + 1
         });
 
         if (device.virtual_machines.length > 0 && this.showvms) {
-            createVmsNodes(device)
+            createVmsNodes(device);
         }
         
     }
@@ -142,10 +141,6 @@ function createVmsNodes(device) {
             'style': 'line',
             'color': vmDefaultColor,
             'width': 2,
-            'length': undefined,
-            'value': undefined,
-            'title': undefined,
-            'label': undefined
         });
     }
 }
@@ -155,11 +150,11 @@ function createVmsNodes(device) {
  */
 function createEdges() {
     for (var i = 0; i < devices.length; i++) {
-        device = devices[i]
+        device = devices[i];
 
         for (var j = 0; j < device.interfaces.length; j++) {
-            var int = device.interfaces[j]
-            var link = [device.mac_address, int.remote_mac_address]
+            var int = device.interfaces[j];
+            var link = [device.mac_address, int.remote_mac_address];
 
             if (nodeExists(int.remote_mac_address) && !edgeExists(link)) {
                 edges.push(
@@ -167,25 +162,21 @@ function createEdges() {
                         'from': link[0],
                         'to': link[1],
                         'style': 'line',
-                        'color': undefined,
                         'width': 2,
-                        'length': undefined,
-                        'value': undefined,
-                        'title': undefined,
                         'labelFrom': int.local_port,
                         'labelTo': int.remote_port
                     });
             }
 
             for (var k = 0; k < int.vlans.length; k++) {
-                var vlan = int.vlans[k]
+                var vlan = int.vlans[k];
                 if (!vlanExists(vlan)) {
-                    myVlans.push(vlan)
+                    myVlans.push(vlan);
                 }
             }
         }
     }
-    myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
+    myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)});
 }
 
 /*
@@ -194,7 +185,7 @@ function createEdges() {
 function addSearchOptions() {
 
     var txtSearch = "<input id='txtSearch' class='typeahead' type='text'";
-    txtSearch += " placeholder='Find a device' onchange='selectNode(undefined, false)'>"
+    txtSearch += " placeholder='Find a device' onchange='selectNode(undefined, false)'>";
     var btnFocus = "<button id='btnFocus' onclick='toggleFocusOnNode()'>Focus</button>";
     
     var content = txtSearch + btnFocus;
@@ -235,7 +226,7 @@ function selectNode(sysName, zoom) {
     }
 
     for (var i = 0; i < devices.length; i++) {
-        var device = devices[i]
+        var device = devices[i];
         if (device.system_name == sysName) {
             onNodeSelect([device.mac_address]);
             if (zoom) {
@@ -276,13 +267,13 @@ function prepareSearchEngine() {
 function addGeneralOptions() {
     var content = "<b>General settings:</b></br>";
 
-    var chkShowVms = "<input type='checkbox' name='showvms'"
-    chkShowVms += this.showvms ? "checked " : " "
-    chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>"
+    var chkShowVms = "<input type='checkbox' name='showvms'";
+    chkShowVms += this.showvms ? "checked " : " ";
+    chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>";
 
-    var chkFreezeSimulation = "<input type='checkbox' name='freezeSimulation' "
-    chkFreezeSimulation += this.freezeSimulation ? "checked " : " "
-    chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>"
+    var chkFreezeSimulation = "<input type='checkbox' name='freezeSimulation' ";
+    chkFreezeSimulation += this.freezeSimulation ? "checked " : " ";
+    chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>";
 
     content += chkShowVms + chkFreezeSimulation;
     document.getElementById('general').innerHTML = content + "<hr>";
@@ -300,7 +291,7 @@ function toggleCheckbox(element)
         draw(); //TODO Find a way to make it load faster
     }
     else if (element.name == "freezeSimulation") {
-        this.freezeSimulation = element.checked
+        this.freezeSimulation = element.checked;
         network.freezeSimulation(this.freezeSimulation);
     }
 }
@@ -349,15 +340,15 @@ function onSelect(properties) {
  * Manage the event when a node is selected
  */
 function onNodeSelect(node) {
-    focusedOnNode = false;
-
     var device = getDevice(node);
-    network.selectNodes([device.mac_address]);
-    document.getElementById('txtSearch').value = device.system_name;
 
     var content = buildNodeDescription(device);
 
     document.getElementById('selectionInfo').innerHTML = content + "<hr>";
+
+    document.getElementById('txtSearch').value = device.system_name;
+    network.selectNodes([device.mac_address]);
+    focusedOnNode = false;
 }
 
 /*
@@ -375,14 +366,14 @@ function onEdgeSelect(edge) {
  * Builds node description
  */
 function buildNodeDescription(device) {
-    ip = "?"
-    ip_type = "IP"
+    ip = "?";
+    ip_type = "IP";
 
     if (device.ip_address) {
-        ip = device.ip_address
+        ip = device.ip_address;
     }
     if (device.ip_address_type) {
-        ip_type = device.ip_address_type.toUpperCase()
+        ip_type = device.ip_address_type.toUpperCase();
     }
 
     return (
@@ -402,7 +393,7 @@ function buildNodeDescription(device) {
 function buildConnectedPortsList(device) {
 
     var connectedPorts = "<b>Connected interfaces:</b></br>";
-    var otherCount = 0
+    var otherCount = 0;
 
     for (var i = 0; i < device.interfaces.length; i++) {
         var int = device.interfaces[i];
@@ -419,7 +410,7 @@ function buildConnectedPortsList(device) {
     }
 
     if (otherCount > 0) {
-        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>"
+        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>";
     }
 
     return device.interfaces.length > 0 ? connectedPorts : ""; 
@@ -467,16 +458,16 @@ function buildEdgeDescription(edge) {
     var differences = vlansIdentifiers(vlansTo).diff(vlansIdentifiers(vlansFrom))
 
     if (vlansFrom.length > 0) {
-        contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>"
+        contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>";
         contentFrom += vlansToString(vlansFrom, macAdressFrom, differences);
     }
 
     if (vlansTo.length > 0) {
-        contentTo += "Vlans on <b>" + interfaceTo.local_port + "</b>&nbsp:</br>"
+        contentTo += "Vlans on <b>" + interfaceTo.local_port + "</b>&nbsp:</br>";
         contentTo += vlansToString(vlansTo, macAdressTo, differences);
     }
 
-    var content = contentFrom + "</br>" + contentTo + "</br>"
+    var content = contentFrom + "</br>" + contentTo + "</br>";
 
     return content;
 }
@@ -485,7 +476,7 @@ function buildEdgeDescription(edge) {
  * Make an array of the vlans identifiers only
  */
 function vlansIdentifiers(vlans) {
-    var identifiers = []
+    var identifiers = [];
     for (var i = 0; i < vlans.length; i++) {
         identifiers.push(vlans[i].identifier);
     }
@@ -496,15 +487,15 @@ function vlansIdentifiers(vlans) {
  * Stringify a list of vlans with their identifiers only
  */
 function vlansToString(vlans, str, differences) {
-    var string = ""
+    var string = "";
     for (var i = 0; i < vlans.length; i++) {
-        var vlan = vlans[i]
+        var vlan = vlans[i];
 
-        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black"
+        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black";
 
-        var ref = str + "/vlan" + vlan.identifier
-        string += vlansInfo(vlan, ref, color)
-        string += (i < vlans.length -1) ? ", " : ""
+        var ref = str + "/vlan" + vlan.identifier;
+        string += vlansInfo(vlan, ref, color);
+        string += (i < vlans.length -1) ? ", " : "";
     }
     return string;
 }
@@ -514,16 +505,16 @@ function vlansToString(vlans, str, differences) {
  */
 function vlansInfo(vlan, ref, color) {
     // tooltip
-    var string = "<a href='#" + ref + "' title='"
+    var string = "<a href='#" + ref + "' title='";
     string += "Name: " + vlan.name + "\n";
     string += "Mode: " + vlan.mode + "\n";
     string += "Status: " + vlan.status + "'";
 
     // <div> toggle
-    string += " onclick=\"toggle('" + ref + "');\">"
-    string += "<font color='" + color + "'>" + vlan.identifier + "</font></a>"
-    string += "<small><div id='" + ref + "' style='display: none;'> "
-    string += "<font color='" + color + "'>"
+    string += " onclick=\"toggle('" + ref + "');\">";
+    string += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
+    string += "<small><div id='" + ref + "' style='display: none;'> ";
+    string += "<font color='" + color + "'>";
     string += "(<b>Name:</b> " + vlan.name + ", ";
     string += "<b>Mode:</b> " + vlan.mode + ", ";
     string += "<b>Status:</b> " + vlan.status + ")</font></div></small>";
@@ -549,8 +540,8 @@ function toggle(divId) {
  * Generates a dropdown list containing all the vlans identifier
  */
 function createVlansList() {
-    var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>"
-    options += "<option value='noVlanSelection'></option>" 
+    var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>";
+    options += "<option value='noVlanSelection'></option>" ;
 
     for (var i = 0; i < myVlans.length; i++) {
         options += "<option value='" + myVlans[i].identifier + "'>";
@@ -575,15 +566,30 @@ function displayVlanInfo() {
     if (vlan != null) {
         id = vlan.identifier;
         info += "<span><b>Name:</b> " + vlan.name + "</span><br>";
-        info += "<rect style='background:" + vlanDiffusionColor + ";'></rect>";
-        info += "<span><b>&nbspDiffusion</b></span></br>";
-        info += "<rect style='background:" + vlanIncoherenceColor + ";'></rect>";
-        info += "<span><b>&nbspIncoherences</b></span>"
+
+        var colorPicker = "<input id='vlanDiffusionColorPicker' type='color'";
+        colorPicker += "onchange='updateColor(vlanDiffusionColorPicker.value, \"vlanDiffusionColor\")'";
+        colorPicker += "value='" + vlanDiffusionColor + "'>";
+
+        info += colorPicker + "<span><b>&nbspDiffusion</b></span></br>";
+
+        var colorPicker = "<input id='vlanIncoherenceColorPicker' type='color'";
+        colorPicker += "onchange='updateColor(vlanIncoherenceColorPicker.value, \"vlanIncoherenceColor\")'";
+        colorPicker += "value='" + vlanIncoherenceColor + "'>";
+
+        info += colorPicker + "<span><b>&nbspIncoherences</b></span>";
     }
 
     document.getElementById("vlanInfo").innerHTML = info + "<hr>";
 
     highlightVlanDiffusion(id);
+}
+
+/**
+ * Updates the color preference
+ */
+function updateColor(color, variable) {
+    window[variable] = color;
 }
 
 /**
@@ -607,8 +613,8 @@ function highlightVlanDiffusion(id) {
             vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
             vlansTo = vlansIdentifiers(interfaceTo.vlans);
 
-            var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1
-            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1
+            var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
+            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
 
             if (coherent) {
                 edge.width = 8;
@@ -633,11 +639,11 @@ function highlightVlanDiffusion(id) {
  */
 function getInterfaceConnectedTo(device, macAdress) {
     if (device == undefined) {
-        return null
+        return null;
     }
 
     for (var i = 0; i < device.interfaces.length; i++) {
-        var int = device.interfaces[i]
+        var int = device.interfaces[i];
         if (int.remote_mac_address == macAdress) {
             return int;
         }
@@ -708,8 +714,8 @@ function nodeExists(id) {
  */
 function edgeExists(link) {
     for (var i = 0; i < edges.length; i++) {
-        from = edges[i].from
-        to = edges[i].to
+        from = edges[i].from;
+        to = edges[i].to;
         if ((from == link[0] && to == link[1]) ||
             (from == link[1] && to == link[0])) {
             return true;
@@ -727,17 +733,17 @@ function resetData() {
  * Returns the differences between two arrays
  */
 Array.prototype.diff = function(other) {
-    diff = []
+    diff = [];
     for (var i = 0; i < this.length; i++) {
-        obj = this[i]
+        obj = this[i];
         if (other.indexOf(obj) == -1) {
-            diff.push(obj)
+            diff.push(obj);
         }
     }
     for (var i = 0; i < other.length; i++) {
-        obj = other[i]
+        obj = other[i];
         if (this.indexOf(obj) == -1 && diff.indexOf(obj) == -1) {
-            diff.push(obj)
+            diff.push(obj);
         }
     }
     return diff;

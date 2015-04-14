@@ -7,17 +7,23 @@
     <script type="text/javascript" src="./js/vis.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
     <script type="text/javascript" src="./js/networkmap.js"></script>
+    <script type="text/javascript" src="./js/typeahead.bundle.min.js"></script>
 
     <link type="text/css" href="./css/vis.css" rel="stylesheet"/>
     <link type="text/css" href="./css/networkmap.css" rel="stylesheet"/>
 </head>
 
-<body onload="draw();" onresize="network.redraw();">
+<body onload="draw();" onresize="network.redraw();" onkeypress="onKeyPress(event);">
 
     <div id="networkmap"></div>
     <div id="options">
+        <div id="deviceSearch">
+            <input class="typeahead" type="text" placeholder="Find a device">
+        </div>
         <div id="general"></div>
-        <div id="vlanSelect"><b>No vlan found</b><hr></div>
+        <div id="vlanSelect">
+            <b>No vlan found</b><hr>
+        </div>
         <div id="vlanInfo"></div>
 
         <div id="selectionInfo"><b>No selection</b><hr></div>

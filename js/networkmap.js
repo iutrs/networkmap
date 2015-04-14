@@ -77,6 +77,7 @@ function draw() {
     network = new vis.Network(container, data, options);
     network.freezeSimulation(freezeSimulation);
 
+    prepareSearchEngine();
     addGeneralOptionsControls();
     addEventsListeners();
     createVlansList();
@@ -106,7 +107,7 @@ function createNodes() {
             'mass': device.interfaces.length + 1
         });
 
-        if (device.virtual_machines.length > 0 && showvms) {
+        if (device.virtual_machines.length > 0 && this.showvms) {
             createVmsNodes(device)
         }
         
@@ -183,19 +184,46 @@ function createEdges() {
     myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)})
 }
 
+/*
+ * Preparing the autocompletion search engine for the devices
+ * TODO Upgrade the search with regex
+ */
+function prepareSearchEngine() {
+
+    var engine = new Bloodhound({
+        datumTokenizer: Bloodhound.tokenizers.obj.whitespace('system_name', 'ip_address'),
+        queryTokenizer: Bloodhound.tokenizers.whitespace,
+        local: this.devices
+    });
+
+    engine.initialize();
+
+    $('#deviceSearch .typeahead').typeahead({
+        hint: true,
+        highlight: true,
+        minLength: 1
+    },
+    {
+        displayKey: 'system_name',
+        source: engine.ttAdapter()
+    });
+}
+
 /**
  * Adding the general options
  */
 function addGeneralOptionsControls() {
+    var content = "<b>General settings:</b></br>";
+
     var chkShowVms = "<input type='checkbox' name='showvms'"
-    chkShowVms += showvms ? "checked " : " "
+    chkShowVms += this.showvms ? "checked " : " "
     chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>"
 
     var chkFreezeSimulation = "<input type='checkbox' name='freezeSimulation' "
-    chkFreezeSimulation += freezeSimulation ? "checked " : " "
+    chkFreezeSimulation += this.freezeSimulation ? "checked " : " "
     chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>"
 
-    var content = chkShowVms + chkFreezeSimulation;
+    content += chkShowVms + chkFreezeSimulation;
     document.getElementById('general').innerHTML = content + "<hr>";
 }
 
@@ -206,14 +234,14 @@ function toggleCheckbox(element)
 {
     //TODO Find a way to make it load faster
     if (element.name == "showvms") {
-        showvms = element.checked;
+        this.showvms = element.checked;
         nodes = [];
         edges = [];
         draw();
     }
     else if (element.name == "freezeSimulation") {
-        freezeSimulation = element.checked
-        network.freezeSimulation(freezeSimulation);
+        this.freezeSimulation = element.checked
+        network.freezeSimulation(this.freezeSimulation);
     }
 }
 
@@ -222,6 +250,14 @@ function toggleCheckbox(element)
  */
 function addEventsListeners() {
     network.on('select', onSelect);
+}
+
+/**
+ * Manage the key presses events
+ */
+function onKeyPress(event){
+    var charCode = ('charCode' in event) ? event.charCode : event.keyCode;
+    console.log("Unicode '" + charCode + "' was pressed.");
 }
 
 /*
@@ -605,7 +641,7 @@ function edgeExists(link) {
 function resetData() {
     network.freezeSimulation(false);
     network.setData({nodes: nodes, edges: edges});
-    network.freezeSimulation(freezeSimulation);
+    network.freezeSimulation(this.freezeSimulation);
 }
 
 /*

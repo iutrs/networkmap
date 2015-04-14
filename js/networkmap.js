@@ -33,6 +33,8 @@ var vmDefaultColor = "#FF9900"
 var showvms = false;
 var freezeSimulation = true;
 
+var focusedOnNode = false;
+
 function draw() {
 
     if (devices == null) {
@@ -77,9 +79,11 @@ function draw() {
     network = new vis.Network(container, data, options);
     network.freezeSimulation(freezeSimulation);
 
-    prepareSearchEngine();
-    addGeneralOptionsControls();
+    addSearchOptions();
+    addGeneralOptions();
+
     addEventsListeners();
+
     createVlansList();
 }
 
@@ -185,11 +189,68 @@ function createEdges() {
 }
 
 /*
+ * Add the html controls to search and focus on a specific device/node
+ */
+function addSearchOptions() {
+
+    var txtSearch = "<input id='txtSearch' class='typeahead' type='text'";
+    txtSearch += " placeholder='Find a device' onchange='selectNode(undefined, false)'>"
+    var btnFocus = "<button id='btnFocus' onclick='toggleFocusOnNode()'>Focus</button>";
+    
+    var content = txtSearch + btnFocus;
+
+    document.getElementById('deviceSearch').innerHTML = content + "<hr>";
+
+    prepareSearchEngine();
+}
+
+/*
+ * Select the node associated the specified system name.
+ * If no argument is given (or undefined), it will try to select the node
+ * with the system name entered in the search box.
+ */
+function toggleFocusOnNode() {
+    if (focusedOnNode) {
+        network.zoomExtent({duration:0});
+    }
+    else {
+        selectNode(undefined, true);
+    }
+    
+    focusedOnNode = !focusedOnNode;
+}
+
+/*
+ * Select the node associated the specified system name.
+ * If no argument is given (or undefined), it will try to select the node
+ * with the system name entered in the search box.
+ */
+function selectNode(sysName, zoom) {
+    if (sysName == undefined) {
+        sysName = document.getElementById('txtSearch').value;
+    }
+
+    if (sysName == "") {
+        return;
+    }
+
+    for (var i = 0; i < devices.length; i++) {
+        var device = devices[i]
+        if (device.system_name == sysName) {
+            onNodeSelect([device.mac_address]);
+            if (zoom) {
+                network.focusOnNode(device.mac_address, {scale:1});
+            }
+            break;
+        }
+    }
+}
+
+/*
  * Preparing the autocompletion search engine for the devices
  * TODO Upgrade the search with regex
  */
 function prepareSearchEngine() {
-
     var engine = new Bloodhound({
         datumTokenizer: Bloodhound.tokenizers.obj.whitespace('system_name', 'ip_address'),
         queryTokenizer: Bloodhound.tokenizers.whitespace,
@@ -212,7 +273,7 @@ function prepareSearchEngine() {
 /**
  * Adding the general options
  */
-function addGeneralOptionsControls() {
+function addGeneralOptions() {
     var content = "<b>General settings:</b></br>";
 
     var chkShowVms = "<input type='checkbox' name='showvms'"
@@ -232,24 +293,16 @@ function addGeneralOptionsControls() {
  */
 function toggleCheckbox(element)
 {
-    //TODO Find a way to make it load faster
     if (element.name == "showvms") {
         this.showvms = element.checked;
         nodes = [];
         edges = [];
-        draw();
+        draw(); //TODO Find a way to make it load faster
     }
     else if (element.name == "freezeSimulation") {
         this.freezeSimulation = element.checked
         network.freezeSimulation(this.freezeSimulation);
     }
-}
-
-/**
- * Adding the events listeners
- */
-function addEventsListeners() {
-    network.on('select', onSelect);
 }
 
 /**
@@ -260,6 +313,24 @@ function onKeyPress(event){
     console.log("Unicode '" + charCode + "' was pressed.");
 }
 
+/**
+ * Adding the events listeners
+ */
+function addEventsListeners() {
+    network.on('doubleClick', onDoubleClick);
+    network.on('select', onSelect);
+}
+
+/*
+ * Manage the event when an object is double-clicked
+ */
+function onDoubleClick(properties) {
+    if (properties.nodes.length > 0) {
+        network.focusOnNode(properties.nodes[0], {scale:1});
+    }
+    onNodeSelect(properties.nodes);
+}
+
 /*
  * Manage the event when an object is selected
  */
@@ -267,21 +338,26 @@ function onSelect(properties) {
     var content = "<b>No selection</b>"
 
     if (properties.nodes.length > 0) {
-        content = onNodeSelect(properties.nodes);
+        onNodeSelect(properties.nodes);
     }
     else if (properties.edges.length > 0) {
-        content = onEdgeSelect(properties.edges);
+        onEdgeSelect(properties.edges);
     }
-
-    document.getElementById('selectionInfo').innerHTML = content + "<hr>";
 }
 
 /*
  * Manage the event when a node is selected
  */
 function onNodeSelect(node) {
+    focusedOnNode = false;
+
     var device = getDevice(node);
-    return buildNodeDescription(device);
+    network.selectNodes([device.mac_address]);
+    document.getElementById('txtSearch').value = device.system_name;
+
+    var content = buildNodeDescription(device);
+
+    document.getElementById('selectionInfo').innerHTML = content + "<hr>";
 }
 
 /*
@@ -289,7 +365,10 @@ function onNodeSelect(node) {
  */
 function onEdgeSelect(edge) {
     var edge = getEdge(edge);
-    return buildEdgeDescription(edge);
+
+    var content = buildEdgeDescription(edge);
+
+    document.getElementById('selectionInfo').innerHTML = content + "<hr>";
 }
 
 /**

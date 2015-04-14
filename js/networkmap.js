@@ -139,7 +139,7 @@ function createVmsNodes(device) {
             'length': undefined,
             'value': undefined,
             'title': undefined,
-            'label': vm.identifier
+            'label': undefined
         });
     }
 }
@@ -188,7 +188,7 @@ function createEdges() {
 function addGeneralOptionsControls() {
     var content = "<input type='checkbox' name='showvms' value='showvms' "
     content += showvms ? "checked " : " "
-    content += "onclick='toggleCheckbox(this);'> Show virtual machines <br>"
+    content += "onchange='toggleCheckbox(this);'> Show virtual machines <br>"
 
     document.getElementById('general').innerHTML = content + "<hr>";
 }
@@ -198,6 +198,7 @@ function addGeneralOptionsControls() {
  */
 function toggleCheckbox(element)
 {
+    //TODO Find a way to make it load faster
     if (element.name == "showvms") {
         showvms = element.checked;
         nodes = [];
@@ -265,7 +266,8 @@ function buildNodeDescription(device) {
         "<b>" + ip_type + ":</b> " + ip + "</br>" +
         "<b>MAC:</b> " + device.mac_address + "</br>" +
         "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
-        "<b>Connected ports:</b></br>" + buildConnectedPortsList(device)
+        buildConnectedPortsList(device) + 
+        buildVirtualMachinesList(device)
     )
 }
 
@@ -274,7 +276,7 @@ function buildNodeDescription(device) {
  */
 function buildConnectedPortsList(device) {
 
-    var connectedPorts = "";
+    var connectedPorts = "<b>Connected interfaces:</b></br>";
     var otherCount = 0
 
     for (var i = 0; i < device.interfaces.length; i++) {
@@ -292,10 +294,27 @@ function buildConnectedPortsList(device) {
     }
 
     if (otherCount > 0) {
-        connectedPorts += "<b>Other connections:</b> " + otherCount
+        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>"
     }
 
-    return connectedPorts != "" ? connectedPorts : ""; 
+    return device.interfaces.length > 0 ? connectedPorts : ""; 
+}
+
+/**
+ * Builds device's virtual machines list
+ */
+function buildVirtualMachinesList(device) {
+
+    var output = "<b>Virtual machines:</b></br>";
+
+    for (var i = 0; i < device.virtual_machines.length; i++) {
+        var vm = device.virtual_machines[i];
+
+        var line = vm.identifier + " | <b>" + vm.name + "</b> (" + vm.state + ")";
+        output += line + "</br>";
+    }
+
+    return device.virtual_machines.length > 0 ? output : ""; 
 }
 
 /**

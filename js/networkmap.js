@@ -31,6 +31,7 @@ var vmDefaultColor = "#FF9900"
 
 // General options
 var showvms = false;
+var freezeSimulation = true;
 
 function draw() {
 
@@ -74,7 +75,7 @@ function draw() {
     var container = document.getElementById('networkmap');
 
     network = new vis.Network(container, data, options);
-    network.freezeSimulation(true);
+    network.freezeSimulation(freezeSimulation);
 
     addGeneralOptionsControls();
     addEventsListeners();
@@ -186,10 +187,15 @@ function createEdges() {
  * Adding the general options
  */
 function addGeneralOptionsControls() {
-    var content = "<input type='checkbox' name='showvms' value='showvms' "
-    content += showvms ? "checked " : " "
-    content += "onchange='toggleCheckbox(this);'> Show virtual machines <br>"
+    var chkShowVms = "<input type='checkbox' name='showvms'"
+    chkShowVms += showvms ? "checked " : " "
+    chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>"
 
+    var chkFreezeSimulation = "<input type='checkbox' name='freezeSimulation' "
+    chkFreezeSimulation += freezeSimulation ? "checked " : " "
+    chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>"
+
+    var content = chkShowVms + chkFreezeSimulation;
     document.getElementById('general').innerHTML = content + "<hr>";
 }
 
@@ -204,6 +210,10 @@ function toggleCheckbox(element)
         nodes = [];
         edges = [];
         draw();
+    }
+    else if (element.name == "freezeSimulation") {
+        freezeSimulation = element.checked
+        network.freezeSimulation(freezeSimulation);
     }
 }
 
@@ -595,8 +605,9 @@ function edgeExists(link) {
 function resetData() {
     network.freezeSimulation(false);
     network.setData({nodes: nodes, edges: edges});
-    network.freezeSimulation(true);
+    network.freezeSimulation(freezeSimulation);
 }
+
 /*
  * Returns the differences between two arrays
  */

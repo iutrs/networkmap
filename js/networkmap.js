@@ -425,6 +425,8 @@ function toggle(divId) {
  */
 function createVlansList() {
     var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>"
+    options += "<option value='noVlanSelection'></option>" 
+
     for (var i = 0; i < myVlans.length; i++) {
         options += "<option value='" + myVlans[i].identifier + "'>";
         options += myVlans[i].identifier + "</option>";
@@ -442,16 +444,21 @@ function displayVlanInfo() {
     var vlans = document.getElementById("vlansDropDown");
     var vlan = getVlan(vlans.options[vlans.selectedIndex].value);
 
-    var info = "<span><b>Name:</b> " + vlan.name + "</span><br>";
+    var id = -1;
+    var info = "";
 
-    info += "<rect style='background:" + vlanDiffusionColor + ";'></rect>";
-    info += "<span><b>&nbspDiffusion</b></span></br>";
-    info += "<rect style='background:" + vlanIncoherenceColor + ";'></rect>";
-    info += "<span><b>&nbspIncoherences</b></span><hr>"
+    if (vlan != null) {
+        id = vlan.identifier;
+        info += "<span><b>Name:</b> " + vlan.name + "</span><br>";
+        info += "<rect style='background:" + vlanDiffusionColor + ";'></rect>";
+        info += "<span><b>&nbspDiffusion</b></span></br>";
+        info += "<rect style='background:" + vlanIncoherenceColor + ";'></rect>";
+        info += "<span><b>&nbspIncoherences</b></span>"
+    }
 
-    document.getElementById("vlanInfo").innerHTML = info;
+    document.getElementById("vlanInfo").innerHTML = info + "<hr>";
 
-    highlightVlanDiffusion(vlan.identifier);
+    highlightVlanDiffusion(id);
 }
 
 /**

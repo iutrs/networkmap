@@ -35,6 +35,9 @@ var freezeSimulation = true;
 
 var focusedOnNode = false;
 
+// Loading the nodes' position
+var nodesPosition = getPositions();
+
 function draw() {
 
     if (devices == null) {
@@ -42,12 +45,9 @@ function draw() {
         document.getElementById('networkmap').innerHTML = errorMessage;
     }
 
-    createNodes();
-    createEdges();
-
     var data = {
-        nodes: nodes,
-        edges: edges
+        nodes: createNodes(),
+        edges: createEdges()
     };
 
     var options = {
@@ -77,7 +77,8 @@ function draw() {
     var container = document.getElementById('networkmap');
 
     network = new vis.Network(container, data, options);
-    network.freezeSimulation(freezeSimulation);
+    network.freezeSimulation(true);
+    nodesPosition = network.getPositions();
 
     addSearchOptions();
     addGeneralOptions();
@@ -100,6 +101,15 @@ function createNodes() {
             color = unaccessibleSwitchColor;
         }
 
+        posX = undefined;
+        posY = undefined;
+
+        storedPos = getPosition(device.mac_address);
+        if (storedPos) {
+            posX = storedPos[0];
+            posY = storedPos[1];
+        }
+        
         nodes.push(
         {
             'id': device.mac_address,
@@ -107,7 +117,11 @@ function createNodes() {
             'shape': 'square',
             'color': color,
             'value': device.interfaces.length + 1,
-            'mass': device.interfaces.length + 1
+            'mass': device.interfaces.length + 1,
+            'x': posX,
+            'y': posY,
+            'allowedToMoveX': posX == undefined,
+            'allowedToMoveY': posX == undefined
         });
 
         if (device.virtual_machines.length > 0 && this.showvms) {
@@ -115,6 +129,7 @@ function createNodes() {
         }
         
     }
+    return nodes;
 }
 
 /**
@@ -143,6 +158,7 @@ function createVmsNodes(device) {
             'width': 2,
         });
     }
+    return nodes;
 }
 
 /**
@@ -177,6 +193,7 @@ function createEdges() {
         }
     }
     myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)});
+    return edges;
 }
 
 /*
@@ -275,7 +292,13 @@ function addGeneralOptions() {
     chkFreezeSimulation += this.freezeSimulation ? "checked " : " ";
     chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>";
 
-    content += chkShowVms + chkFreezeSimulation;
+    var btnStorePositions = "<button type='button' name='storePositions' ";
+    btnStorePositions += "onclick='storePositions();'> Store positions </button><br>";
+
+    var btnClearPositions = "<button type='button' name='clearPositions' ";
+    btnClearPositions += "onclick='clearPositions();'> Clear positions </button><br>";
+
+    content += chkShowVms + chkFreezeSimulation + btnStorePositions + btnClearPositions;
     document.getElementById('general').innerHTML = content + "<hr>";
 }
 
@@ -309,20 +332,41 @@ function onKeyPress(event){
  */
 function addEventsListeners() {
     network.on('doubleClick', onDoubleClick);
+    network.on('dragEnd', onDragEnd);
     network.on('select', onSelect);
 }
 
-/*
+/**
  * Manage the event when an object is double-clicked
  */
 function onDoubleClick(properties) {
-    if (properties.nodes.length > 0) {
-        network.focusOnNode(properties.nodes[0], {scale:1});
+    for (var i = 0; i < properties.nodes.length; i++) {
+        network.focusOnNode(properties.nodes[i], {scale:1});
     }
     onNodeSelect(properties.nodes);
 }
 
-/*
+/**
+ * Manage the event when an object is released when dragged
+ */
+function onDragEnd(properties) {
+    if (nodesPosition == undefined) {
+        nodesPosition = network.getPositions();
+    }
+
+    for (var i = 0; i < properties.nodeIds.length; i++) {
+        var id = properties.nodeIds[i];
+
+        var newPos = network.getPositions([id])[id];
+        var node = getNode(id);
+        node.x = newPos.x;
+        node.y = newPos.y;
+        nodesPosition[id].x = newPos.x;
+        nodesPosition[id].y = newPos.y;
+    }
+}
+
+/**
  * Manage the event when an object is selected
  */
 function onSelect(properties) {
@@ -336,22 +380,22 @@ function onSelect(properties) {
     }
 }
 
-/*
+/**
  * Manage the event when a node is selected
  */
-function onNodeSelect(node) {
-    var device = getDevice(node);
+function onNodeSelect(nodeId) {
+    var device = getDevice(nodeId);
 
     var content = buildNodeDescription(device);
 
     document.getElementById('selectionInfo').innerHTML = content + "<hr>";
 
     document.getElementById('txtSearch').value = device.system_name;
-    network.selectNodes([device.mac_address]);
+    network.selectNodes([nodeId]);
     focusedOnNode = false;
 }
 
-/*
+/**
  * Manage the event when an edge is selected
  */
 function onEdgeSelect(edge) {
@@ -366,8 +410,8 @@ function onEdgeSelect(edge) {
  * Builds node description
  */
 function buildNodeDescription(device) {
-    ip = "?";
-    ip_type = "IP";
+    var ip = "?";
+    var ip_type = "IP";
 
     if (device.ip_address) {
         ip = device.ip_address;
@@ -472,7 +516,7 @@ function buildEdgeDescription(edge) {
     return content;
 }
 
-/*
+/**
  * Make an array of the vlans identifiers only
  */
 function vlansIdentifiers(vlans) {
@@ -483,7 +527,7 @@ function vlansIdentifiers(vlans) {
     return identifiers;
 }
 
-/*
+/**
  * Stringify a list of vlans with their identifiers only
  */
 function vlansToString(vlans, str, differences) {
@@ -500,7 +544,7 @@ function vlansToString(vlans, str, differences) {
     return string;
 }
 
-/*
+/**
  * Generate vlan info (tooltip + div)
  */
 function vlansInfo(vlan, ref, color) {
@@ -522,7 +566,7 @@ function vlansInfo(vlan, ref, color) {
     return string;
 }
 
-/*
+/**
  * Show or hide a div by its id
  */
 function toggle(divId) {
@@ -610,8 +654,8 @@ function highlightVlanDiffusion(id) {
         var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
 
         if (interfaceFrom != null && interfaceTo != null) {
-            vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
-            vlansTo = vlansIdentifiers(interfaceTo.vlans);
+            var vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
+            var vlansTo = vlansIdentifiers(interfaceTo.vlans);
 
             var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
             var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
@@ -634,7 +678,7 @@ function highlightVlanDiffusion(id) {
     resetData();
 }
 
-/*
+/**
  * Get the interface connected from a device to another known mac address
  */
 function getInterfaceConnectedTo(device, macAdress) {
@@ -714,8 +758,8 @@ function nodeExists(id) {
  */
 function edgeExists(link) {
     for (var i = 0; i < edges.length; i++) {
-        from = edges[i].from;
-        to = edges[i].to;
+        var from = edges[i].from;
+        var to = edges[i].to;
         if ((from == link[0] && to == link[1]) ||
             (from == link[1] && to == link[0])) {
             return true;
@@ -723,6 +767,46 @@ function edgeExists(link) {
     }
 }
 
+/**
+ * Retrieves the position of all nodes in local storage.
+ */
+function getPositions() {
+    if (localStorage["nodesPosition"]) {
+        return JSON.parse(localStorage["nodesPosition"]);
+    }
+}
+
+/**
+ * Get the position of a node from the local storage.
+ */
+function getPosition(nodeID) {
+    if (nodesPosition) {
+        var x = nodesPosition[nodeID].x;
+        var y = nodesPosition[nodeID].y;
+        return [x, y];
+    }
+}
+
+
+/**
+ * Saves the position of all nodes in local storage.
+ */
+function storePositions()
+{
+    nodesPosition = network.getPositions();
+    localStorage["nodesPosition"] = JSON.stringify(nodesPosition);
+}
+
+/**
+ * Clears the nodes position in the local storage
+ */
+function clearPositions() {
+    localStorage["nodesPosition"] = undefined;
+}
+
+/**
+ * Resets the nodes and the edges in the network
+ */
 function resetData() {
     network.freezeSimulation(false);
     network.setData({nodes: nodes, edges: edges});
@@ -733,15 +817,15 @@ function resetData() {
  * Returns the differences between two arrays
  */
 Array.prototype.diff = function(other) {
-    diff = [];
+    var diff = [];
     for (var i = 0; i < this.length; i++) {
-        obj = this[i];
+        var obj = this[i];
         if (other.indexOf(obj) == -1) {
             diff.push(obj);
         }
     }
     for (var i = 0; i < other.length; i++) {
-        obj = other[i];
+        var obj = other[i];
         if (this.indexOf(obj) == -1 && diff.indexOf(obj) == -1) {
             diff.push(obj);
         }

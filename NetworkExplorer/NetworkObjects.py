@@ -66,6 +66,20 @@ class VirtualMachine(NetworkObject):
             )
 
 
+class Trunk(NetworkObject):
+    def __init__(
+            self,
+            name=None,
+            type=None,
+            group=None,
+            ports=[]):
+
+        self.name = name
+        self.type = type
+        self.group = group
+        self.ports = ports
+
+
 class Interface(NetworkObject):
     def __init__(
             self,
@@ -100,6 +114,7 @@ class Device(NetworkObject):
             supported_capabilities="",
             enabled_capabilities="",
             interfaces=[],
+            trunks={},
             virtual_machines=[]):
 
         self.mac_address = mac_address
@@ -110,6 +125,7 @@ class Device(NetworkObject):
         self.supported_capabilities = supported_capabilities
         self.enabled_capabilities = enabled_capabilities
         self.interfaces = interfaces
+        self.trunks = trunks
         self.virtual_machines = virtual_machines
 
     def is_valid_lldp_device(self):

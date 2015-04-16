@@ -6,6 +6,7 @@ Auteur : Marc-Antoine Fortier
 Date   : Mars 2015
 """
 
+import re
 import logging
 
 from NetworkObjects import *
@@ -65,6 +66,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
         self.lldp_local_cmd = "show lldp info local-device\n"
         self.lldp_neighbors_cmd = "show lldp info remote-device\n"
         self.lldp_neighbors_detail_cmd = "show lldp info remote-device {0}\n"
+        self.trunks_list_cmd = "show trunks\n"
         self.vlans_global_cmd = "show vlans\n"
         self.vlans_specific_cmd = "show vlans {0}\n"
         self.vms_list_cmd = None
@@ -206,6 +208,51 @@ class HPNetworkOutputParser(NetworkOutputParser):
     def parse_vms_list(self, vm_result):
         return []
 
+    def parse_trunks(self, trunks_result):
+        """
+        Example of "show trunks" command result:
+
+         Load Balancing
+
+          Port | Name                             Type      | Group Type 
+          ---- + -------------------------------- --------- + ----- -----
+          A13  | SERVEURS                         100/1000T | Trk3  Trunk
+          A14  | SERVEURS                         100/1000T | Trk3  Trunk
+          A15  | BC                               100/1000T | Trk1  Trunk
+          A16  | BC                               100/1000T | Trk1  Trunk
+          B4   | fo INFOCOM 1                     1000SX    | Trk2  Trunk
+          C4   | fo INFOCOM 2                     1000SX    | Trk2  Trunk
+
+        CENTRAL5304-1#
+        """
+
+        trunks = {}
+        try:
+            regex = "(?P<port>\ +[0-z]{1,3}\ +)(\|)(?P<name>.{1,33}\ +)"
+            regex += "(?P<type>.{1,9})( \| )(?P<group>.{1,5})"
+
+            start = False
+            for line in trunks_result.splitlines():
+
+                match = re.search(regex, line)
+                if match:
+                    port = match.group("port").strip()
+                    name = match.group("name").strip()
+                    type = match.group("type").strip()
+                    group = match.group("group").strip()
+
+                    if group in trunks:
+                        trunks[group].ports.append(port)
+                    else:
+                        trunks[group] = Trunk(group=group, name=name,
+                                              type=type, ports=[port])
+
+        except Exception as e:
+            logging.error("Could not parse trunk from : %s. (%s)",
+                          trunks_result, e)
+
+        return trunks
+
     def attribute_lldp_remote_info(self, device, key, value):
         if "ChassisId" in key:
             device.mac_address = value
@@ -258,6 +305,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         self.lldp_local_cmd = "show lldp local-information\n"
         self.lldp_neighbors_cmd = "show lldp neighbors\n"
         self.lldp_neighbors_detail_cmd = "show lldp neighbors interface {0}\n"
+        self.trunks_list_cmd = None
         self.vlans_global_cmd = "show vlans detail\n"
         self.vlans_specific_cmd = None
         self.vms_list_cmd = None
@@ -390,6 +438,9 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
     def parse_vms_list(self, vm_result):
         return []
 
+    def parse_trunks(self, trunks_result):
+        return {}
+
     def attribute_lldp_remote_info(self, device, key, value):
         if "Chassis ID" in key:
             device.mac_address = value.replace(':', ' ')
@@ -437,6 +488,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         self.lldp_local_cmd = None
         self.lldp_neighbors_cmd = "lldpctl\n"
         self.lldp_neighbors_detail_cmd = None
+        self.trunks_list_cmd = None
         self.vlans_global_cmd = None
         self.vlans_specific_cmd = None
         self.vms_list_cmd = "virsh list --all\n"
@@ -476,32 +528,6 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
     def parse_interfaces_from_lldp_remote_info(self, lldp_result):
         return []
 
-    def attribute_lldp_remote_info(self, device, interface, key, value):
-        if "Interface" in key:
-            interface.local_port = value[:value.find(',')]
-        elif "ChassisID" in key:
-            mac = value.replace('mac ', '').replace(':', ' ')
-            device.mac_address = mac
-            interface.remote_mac_address = mac
-        elif "SysName" in key:
-            device.system_name = value
-            interface.remote_system_name = value
-        elif "SysDescr" in key:
-            device.system_description = value
-        elif "Capability" in key and "," in value:
-            tokens = value.split()
-            if "on" in tokens[1]:
-                device.enabled_capabilities += tokens[0]
-            device.supported_capabilities += tokens[0]
-        elif "PortDescr" in key:
-            interface.remote_port = value
-        elif "VLAN" in key:
-            tokens = value.replace(',', '').split()
-            vlan = Vlan(identifier=tokens[0], name=tokens[1])
-            self._assign_vlan_to_interface(vlan, interface)
-        else:
-            pass
-
     def parse_vms_list(self, vm_result):
         vms = []
         try:
@@ -537,6 +563,35 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                           vm_result, e)
 
         return vms
+
+    def parse_trunks(self, trunks_result):
+        return {}
+
+    def attribute_lldp_remote_info(self, device, interface, key, value):
+        if "Interface" in key:
+            interface.local_port = value[:value.find(',')]
+        elif "ChassisID" in key:
+            mac = value.replace('mac ', '').replace(':', ' ')
+            device.mac_address = mac
+            interface.remote_mac_address = mac
+        elif "SysName" in key:
+            device.system_name = value
+            interface.remote_system_name = value
+        elif "SysDescr" in key:
+            device.system_description = value
+        elif "Capability" in key and "," in value:
+            tokens = value.split()
+            if "on" in tokens[1]:
+                device.enabled_capabilities += tokens[0]
+            device.supported_capabilities += tokens[0]
+        elif "PortDescr" in key:
+            interface.remote_port = value
+        elif "VLAN" in key:
+            tokens = value.replace(',', '').split()
+            vlan = Vlan(identifier=tokens[0], name=tokens[1])
+            self._assign_vlan_to_interface(vlan, interface)
+        else:
+            pass
 
     def _assign_vlan_to_interface(self, vlan, interface):
         return NetworkOutputParser.assign_vlan_to_interface(vlan, interface)

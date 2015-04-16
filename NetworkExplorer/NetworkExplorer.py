@@ -132,7 +132,11 @@ class NetworkExplorer(object):
         device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
 
         neighbors_result = self._show_lldp_neighbors()
-        device.interfaces = self._get_lldp_interfaces(neighbors_result)
+        device.interfaces = self.network_parser\
+            .parse_interfaces_from_lldp_remote_info(neighbors_result)
+
+        trunks_result = self._show_trunks()
+        device.trunks = self.network_parser.parse_trunks(trunks_result)
 
         vlans_result = self._show_vlans()
         self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
@@ -152,15 +156,6 @@ class NetworkExplorer(object):
             device, neighbors_result)
 
         return neighbors
-
-    def _get_lldp_interfaces(self, lldp_result):
-        """
-        Obtain the list of all the lldp connected interfaces.
-        """
-        interfaces = self.network_parser\
-            .parse_interfaces_from_lldp_remote_info(lldp_result)
-
-        return interfaces
 
     def _assign_vlans_to_interfaces(self, interfaces, vlans_result):
         """
@@ -194,6 +189,10 @@ class NetworkExplorer(object):
 
     def _show_lldp_neighbor_detail(self, port):
         command = self.network_parser.lldp_neighbors_detail_cmd.format(port)
+        return self._send_ssh_command(command)
+
+    def _show_trunks(self):
+        command = self.network_parser.trunks_list_cmd
         return self._send_ssh_command(command)
 
     def _show_vlans(self):

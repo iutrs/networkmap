@@ -21,8 +21,8 @@ var myVlans = [];
 
 // Objects colors (for further customization)
 var linkDefaultColor = undefined;
-var vlanDiffusionColor = "#00D000";
-var vlanIncoherenceColor = "#FF0000";
+var vlanDiffusionColor = get("vlanDiffusionColor") || "#00D000";
+var vlanIncoherenceColor = get("vlanIncoherenceColor") || "#FF0000";
 
 var nodeDefaultColor = "#2B7CE9";
 var unaccessibleSwitchColor = "#C5000B";
@@ -35,6 +35,8 @@ var freezeSimulation = true;
 
 var focusedOnNode = false;
 
+var selectedVlanId = get("selectedVlanId") || "noVlanSelection";
+
 // Loading the nodes' position
 var nodesPosition = getPositions();
 
@@ -44,6 +46,10 @@ function draw() {
         errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>";
         document.getElementById('networkmap').innerHTML = errorMessage;
     }
+
+    nodes = [];
+    edges = [];
+    nodesPosition = getPositions();
 
     var data = {
         nodes: createNodes(),
@@ -592,8 +598,9 @@ function createVlansList() {
         options += myVlans[i].identifier + "</option>";
     }
     options += "</select></br>";
-    document.getElementById("vlanSelect").innerHTML = options;
 
+    document.getElementById("vlanSelect").innerHTML = options;
+    document.getElementById("vlansDropDown").value = selectedVlanId;
     displayVlanInfo();
 }
 
@@ -602,13 +609,13 @@ function createVlansList() {
  */
 function displayVlanInfo() {
     var vlans = document.getElementById("vlansDropDown");
-    var vlan = getVlan(vlans.options[vlans.selectedIndex].value);
+    selectedVlanId = vlans.options[vlans.selectedIndex].value
 
-    var id = -1;
+    var vlan = getVlan(selectedVlanId);
+
     var info = "";
 
-    if (vlan != null) {
-        id = vlan.identifier;
+    if (vlan != undefined) {
         info += "<span><b>Name:</b> " + vlan.name + "</span><br>";
 
         var colorPicker = "<input id='vlanDiffusionColorPicker' type='color'";
@@ -626,7 +633,8 @@ function displayVlanInfo() {
 
     document.getElementById("vlanInfo").innerHTML = info + "<hr>";
 
-    highlightVlanDiffusion(id);
+    highlightVlanDiffusion(selectedVlanId);
+    store("selectedVlanId", selectedVlanId, false);
 }
 
 /**
@@ -634,13 +642,16 @@ function displayVlanInfo() {
  */
 function updateColor(color, variable) {
     window[variable] = color;
+
+    store(variable, color, false);
+
+    highlightVlanDiffusion(selectedVlanId);
 }
 
 /**
  * Highlights the diffusion of the selected vlan
  */
 function highlightVlanDiffusion(id) {
-
     for (var i = 0; i < edges.length; i++) {
         var edge = edges[i];
 
@@ -768,12 +779,52 @@ function edgeExists(link) {
 }
 
 /**
+ * Store the value in the local storage
+ */
+function store(key, content, json) {
+    localStorage[key] = json ? JSON.stringify(content) : content;
+};
+
+/**
+ * Get the value from the local storage
+ */
+function get(key, json) {
+    if (localStorage[key]) {
+        return json ? JSON.parse(localStorage[key]) : localStorage[key];
+    }
+};
+
+/**
+ * Clears the value in the local storage
+ */
+function clear(key) {
+    if (localStorage[key]) {
+        delete localStorage[key];
+    }
+};
+
+/**
+ * Saves the position of all nodes in local storage.
+ */
+function storePositions()
+{
+    store("nodesPosition", network.getPositions(), true);
+    draw();
+}
+
+/**
+ * Clears the nodes position in the local storage
+ */
+function clearPositions() {
+    clear("nodesPosition");
+    draw();
+}
+
+/**
  * Retrieves the position of all nodes in local storage.
  */
 function getPositions() {
-    if (localStorage["nodesPosition"]) {
-        return JSON.parse(localStorage["nodesPosition"]);
-    }
+    return get("nodesPosition", true);
 }
 
 /**
@@ -787,23 +838,6 @@ function getPosition(nodeID) {
     }
 }
 
-
-/**
- * Saves the position of all nodes in local storage.
- */
-function storePositions()
-{
-    nodesPosition = network.getPositions();
-    localStorage["nodesPosition"] = JSON.stringify(nodesPosition);
-}
-
-/**
- * Clears the nodes position in the local storage
- */
-function clearPositions() {
-    localStorage["nodesPosition"] = undefined;
-}
-
 /**
  * Resets the nodes and the edges in the network
  */
@@ -813,7 +847,12 @@ function resetData() {
     network.freezeSimulation(this.freezeSimulation);
 }
 
-/*
+function varNameToString(variable) {
+    for(key in variable)
+        alert(key + ': ' + variable[key]);
+}
+
+/**
  * Returns the differences between two arrays
  */
 Array.prototype.diff = function(other) {

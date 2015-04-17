@@ -214,7 +214,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
          Load Balancing
 
-          Port | Name                             Type      | Group Type 
+          Port | Name                             Type      | Group Type
           ---- + -------------------------------- --------- + ----- -----
           A13  | SERVEURS                         100/1000T | Trk3  Trunk
           A14  | SERVEURS                         100/1000T | Trk3  Trunk
@@ -305,7 +305,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         self.lldp_local_cmd = "show lldp local-information\n"
         self.lldp_neighbors_cmd = "show lldp neighbors\n"
         self.lldp_neighbors_detail_cmd = "show lldp neighbors interface {0}\n"
-        self.trunks_list_cmd = None
+        self.trunks_list_cmd = "show lldp neighbors\n"
         self.vlans_global_cmd = "show vlans detail\n"
         self.vlans_specific_cmd = None
         self.vms_list_cmd = None
@@ -439,7 +439,41 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         return []
 
     def parse_trunks(self, trunks_result):
-        return {}
+        """
+        Example of "show lldp neighbors" command result:
+
+        Local Interface    Parent Interface    Chassis Id          Port info
+        ge-1/0/46.0        -                   00:0e:7f:6e:c1:20   23
+        ge-0/0/37.0        -                   00:0f:fe:7d:7c:68   eth0
+        ge-1/0/16.0        -                   00:1f:29:01:dc:b7   eth0
+        ge-0/0/47.0        ae0.0               00:21:f7:1e:25:80   23
+        ge-1/0/47.0        ae0.0               00:21:f7:1e:25:80   24
+        ge-1/0/42.0        -                   00:23:7d:5a:2d:ae   eth1
+        ge-1/0/43.0        -                   00:23:7d:5b:09:f4   eth1
+        ge-1/0/44.0        -                   00:23:7d:a7:48:4a   eth1
+        ge-1/0/38.0        -                   9c:8e:99:19:99:78   eth3
+
+        {master:1}
+        admin@info4200-1>
+        """
+        trunks = {}
+
+        try:
+            for line in trunks_result.splitlines():
+                if len(line) > 38:
+                    port = line[:18].strip()
+                    name = line[19:38].strip()
+                    if name in trunks:
+                        trunks[name].ports.append(port)
+                    elif name != "-" and name != "Parent Interface":
+                        trunks[name] = Trunk(group=name,
+                                             name=name,
+                                             ports=[port])
+        except Exception as e:
+            logging.error("Could not parse trunks from : %s. (%s)",
+                          trunks_result, e)
+
+        return trunks
 
     def attribute_lldp_remote_info(self, device, key, value):
         if "Chassis ID" in key:

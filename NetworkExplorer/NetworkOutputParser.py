@@ -140,46 +140,27 @@ class HPNetworkOutputParser(NetworkOutputParser):
                          remote_system_name=sys_name)
 
     def parse_vlans(self, result):
-        """
-        Example of "show vlans" command result:
-
-         Status and Counters - VLAN Information
-
-          Maximum VLANs to support : 128
-          Primary VLAN : DEFAULT_VLAN
-          Management VLAN :
-
-          802.1Q VLAN ID Name         Status       Voice Jumbo
-          -------------- ------------ ------------ ----- -----
-          1              DEFAULT_VLAN Port-based   No    No
-          52             rch iut sud  Port-based   No    No
-          53             ens iutinfo  Port-based   No    No
-          749            ipv6-info-in Port-based   No    No
-          796            toip tel ill Port-based   Yes   No
-          810            adm urs 2    Port-based   No    No
-          948            iutrs-imprim Port-based   No    No
-          2999           toip alcatel Port-based   Yes   No
-
-        INFO2824-1#
-        """
         vlans = []
-
         try:
-            regex = "(?P<id>[0-9]+\ +)(?P<name>.{0,12}\ )(?P<status>\S+)"
+            # Here we try to find the index in between the interesting values
+            # instead of using regular expressions because the output is not
+            # the same on every HP switch.
+            targets = ["Name", "Status"]
+            name_index = None
+            status_index = None
 
             for line in result.splitlines():
-                if self.wait_string in line:
-                    continue
+                if all(t in line for t in targets):
+                    name_index = line.find(targets[0])
+                    status_index = line.find(targets[1])
+                elif "----" not in line and \
+                     name_index is not None and status_index is not None and \
+                     line.strip() != "" and not self.wait_string in line:
 
-                match = re.search(regex, line)
-                if match:
-                    vlan_id = match.group("id").strip()
-                    vlan_name = match.group("name").strip()
-                    vlan_status = match.group("status").strip()
+                    vlan_id = line[:name_index-1].strip()
+                    vlan_name = line[name_index:status_index-1][:-1].strip()
 
-                    vlan = Vlan(identifier=vlan_id,
-                                name=vlan_name,
-                                status = vlan_status)
+                    vlan = Vlan(identifier=vlan_id, name=vlan_name)
                     vlans.append(vlan)
 
         except Exception as e:
@@ -192,6 +173,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
     def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
         try:
+            # Here we try to find the index in between the interesting values
+            # instead of using regular expressions because the output is not
+            # the same on every HP switch.
             mode_index = None
             unknown_index = None
             status_index = None

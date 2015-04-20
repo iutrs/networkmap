@@ -11,8 +11,6 @@ import time
 import socket
 import logging
 
-from multiprocessing import Process, Manager, Queue
-
 import paramiko
 
 from NetworkOutputParser import *
@@ -32,7 +30,7 @@ class NetworkExplorer(object):
 
     def __init__(self,
                  device,
-                 ignore_list=(),
+                 ignore_list=None,
                  ssh_timeout=DEFAULT_TIMEOUT,
                  ssh_max_bytes=DEFAULT_MAX_BYTES,
                  ssh_max_attempts=DEFAULT_MAX_ATTEMPTS,
@@ -50,7 +48,7 @@ class NetworkExplorer(object):
         self.device = device
         self.hostname = device.system_name
 
-        self.ignore_list = ignore_list
+        self.ignore_list = ignore_list or []
 
         self.ssh_timeout = ssh_timeout
         self.ssh_max_bytes = ssh_max_bytes
@@ -128,18 +126,9 @@ class NetworkExplorer(object):
         """
         Obtain the list of all ldp neighbors
         """
-        vm_result = self._show_virtual_machines()
-        device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
-
         neighbors_result = self._show_lldp_neighbors()
         device.interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(neighbors_result)
-
-        trunks_result = self._show_trunks()
-        device.trunks = self.network_parser.parse_trunks(trunks_result)
-
-        vlans_result = self._show_vlans()
-        self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
 
         if len(device.interfaces) > 0:
             neighbors_result = ""
@@ -155,6 +144,17 @@ class NetworkExplorer(object):
         neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
             device, neighbors_result)
 
+        # TODO Move this to other functions?
+        vlans_result = self._show_vlans()
+        self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
+
+        trunks_result = self._show_trunks()
+        device.trunks = self.network_parser.parse_trunks(trunks_result)
+
+        vm_result = self._show_virtual_machines()
+        device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
+        # TODO
+
         return neighbors
 
     def _assign_vlans_to_interfaces(self, interfaces, vlans_result):
@@ -164,7 +164,7 @@ class NetworkExplorer(object):
         if vlans_result is None:
             return
 
-        vlans = self.network_parser.parse_vlans_from_global_info(vlans_result)
+        vlans = self.network_parser.parse_vlans(vlans_result)
 
         if len(vlans) == 0:
             # Some devices do not need to parse vlans from the global info and
@@ -172,7 +172,7 @@ class NetworkExplorer(object):
             self.network_parser.associate_vlans_to_interfaces(
                 interfaces, vlans_result)
 
-        # Other devices need to get specific information form each vlan before
+        # Other devices need to get specific information from each vlan before
         # assigning it one by one to the interfaces
         for vlan in vlans:
             specific_result = self._show_vlan_detail(vlan.identifier)

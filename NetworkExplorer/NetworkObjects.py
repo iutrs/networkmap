@@ -72,12 +72,12 @@ class Trunk(NetworkObject):
             name=None,
             type=None,
             group=None,
-            ports=[]):
+            ports=None):
 
         self.name = name
         self.type = type
         self.group = group
-        self.ports = ports
+        self.ports = ports or []
 
 
 class Interface(NetworkObject):
@@ -87,13 +87,13 @@ class Interface(NetworkObject):
             remote_port=None,
             remote_mac_address=None,
             remote_system_name=None,
-            vlans=[]):
+            vlans=None):
 
         self.local_port = local_port
         self.remote_port = remote_port
         self.remote_mac_address = remote_mac_address
         self.remote_system_name = remote_system_name
-        self.vlans = vlans
+        self.vlans = vlans or []
 
     def is_valid_lldp_interface(self):
         return \
@@ -111,22 +111,22 @@ class Device(NetworkObject):
             ip_address_type=None,
             system_name=None,
             system_description=None,
-            supported_capabilities="",
-            enabled_capabilities="",
-            interfaces=[],
-            trunks={},
-            virtual_machines=[]):
+            supported_capabilities=None,
+            enabled_capabilities=None,
+            interfaces=None,
+            trunks=None,
+            virtual_machines=None):
 
         self.mac_address = mac_address
         self.ip_address = ip_address
         self.ip_address_type = ip_address_type
         self.system_name = system_name
         self.system_description = system_description
-        self.supported_capabilities = supported_capabilities
-        self.enabled_capabilities = enabled_capabilities
-        self.interfaces = interfaces
-        self.trunks = trunks
-        self.virtual_machines = virtual_machines
+        self.supported_capabilities = supported_capabilities or ""
+        self.enabled_capabilities = enabled_capabilities or ""
+        self.interfaces = interfaces or []
+        self.trunks = trunks or {}
+        self.virtual_machines = virtual_machines or []
 
     def is_valid_lldp_device(self):
         return \

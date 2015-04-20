@@ -41,7 +41,6 @@ var selectedVlanId = get("selectedVlanId") || "noVlanSelection";
 var nodesPosition = getPositions();
 
 function draw() {
-
     if (devices == null) {
         errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>";
         document.getElementById('networkmap').innerHTML = errorMessage;
@@ -294,14 +293,14 @@ function addGeneralOptions() {
     chkShowVms += this.showvms ? "checked " : " ";
     chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>";
 
-    var chkFreezeSimulation = "<input type='checkbox' name='freezeSimulation' ";
+    var chkFreezeSimulation = "<input type='checkbox' id='chkFreezeSimulation' ";
     chkFreezeSimulation += this.freezeSimulation ? "checked " : " ";
     chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>";
 
-    var btnStorePositions = "<button type='button' name='storePositions' ";
+    var btnStorePositions = "<button type='button' id='btnStorePositions' ";
     btnStorePositions += "onclick='storePositions();'> Store positions </button><br>";
 
-    var btnClearPositions = "<button type='button' name='clearPositions' ";
+    var btnClearPositions = "<button type='button' id='btnClearPositions' ";
     btnClearPositions += "onclick='clearPositions();'> Clear positions </button><br>";
 
     content += chkShowVms + chkFreezeSimulation + btnStorePositions + btnClearPositions;
@@ -315,8 +314,6 @@ function toggleCheckbox(element)
 {
     if (element.name == "showvms") {
         this.showvms = element.checked;
-        nodes = [];
-        edges = [];
         draw(); //TODO Find a way to make it load faster
     }
     else if (element.name == "freezeSimulation") {
@@ -806,8 +803,7 @@ function clear(key) {
 /**
  * Saves the position of all nodes in local storage.
  */
-function storePositions()
-{
+function storePositions() {
     store("nodesPosition", network.getPositions(), true);
     draw();
 }
@@ -831,7 +827,7 @@ function getPositions() {
  * Get the position of a node from the local storage.
  */
 function getPosition(nodeID) {
-    if (nodesPosition) {
+    if (nodesPosition && nodesPosition[nodeID]) {
         var x = nodesPosition[nodeID].x;
         var y = nodesPosition[nodeID].y;
         return [x, y];
@@ -845,11 +841,6 @@ function resetData() {
     network.freezeSimulation(false);
     network.setData({nodes: nodes, edges: edges});
     network.freezeSimulation(this.freezeSimulation);
-}
-
-function varNameToString(variable) {
-    for(key in variable)
-        alert(key + ': ' + variable[key]);
 }
 
 /**

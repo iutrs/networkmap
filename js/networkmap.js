@@ -17,7 +17,7 @@ var nodes = [];
 var edges = [];
 
 // Arrays used to keep information in memory
-var myVlans = [];
+var myVlans = {};
 
 // Objects colors (for further customization)
 var linkDefaultColor = undefined;
@@ -114,7 +114,7 @@ function createNodes() {
             posX = storedPos[0];
             posY = storedPos[1];
         }
-        
+
         nodes.push(
         {
             'id': device.mac_address,
@@ -132,7 +132,6 @@ function createNodes() {
         if (device.virtual_machines.length > 0 && this.showvms) {
             createVmsNodes(device);
         }
-        
     }
     return nodes;
 }
@@ -189,15 +188,14 @@ function createEdges() {
                     });
             }
 
-            for (var k = 0; k < int.vlans.length; k++) {
-                var vlan = int.vlans[k];
-                if (!vlanExists(vlan)) {
-                    myVlans.push(vlan);
+            for (var index in int.vlans) {
+                if (!(index in myVlans)) {
+                    myVlans[index] = int.vlans[index]
                 }
             }
         }
     }
-    myVlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)});
+
     return edges;
 }
 
@@ -493,16 +491,32 @@ function buildEdgeDescription(edge) {
     var interfaceFrom = getInterfaceConnectedTo(deviceFrom, macAdressTo);
     var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
 
-    var vlansFrom = (interfaceFrom != null) ? interfaceFrom.vlans : [];
-    var vlansTo = (interfaceTo != null) ? interfaceTo.vlans : [];
+    var vlansIdsFrom = [];
+    var vlansFrom = [];
+    if (interfaceFrom != null) {
+        for (var index in interfaceFrom.vlans) {
+            vlansIdsFrom.push(index);
+            vlansFrom.push(interfaceFrom.vlans[index]);
+        }
+    }
+
+    var vlansIdsTo = [];
+    var vlansTo = [];
+    if (interfaceTo != null) {
+        for (var index in interfaceTo.vlans) {
+            vlansIdsTo.push(index);
+            vlansTo.push(interfaceTo.vlans[index]);
+        }
+    }
 
     var contentFrom = "<b>" + deviceFrom.system_name + "</b></br>";
     var contentTo = "<b>" + deviceTo.system_name + "</b></br>";
 
+    // TODO Specify the error message
     contentFrom += (interfaceFrom != null) ? "" : "No vlans could be found.";
     contentTo += (interfaceTo != null) ? "" : "No vlans could be found.";
 
-    var differences = vlansIdentifiers(vlansTo).diff(vlansIdentifiers(vlansFrom))
+    var differences = vlansIdsTo.diff(vlansIdsFrom)
 
     if (vlansFrom.length > 0) {
         contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>";
@@ -517,17 +531,6 @@ function buildEdgeDescription(edge) {
     var content = contentFrom + "</br>" + contentTo + "</br>";
 
     return content;
-}
-
-/**
- * Make an array of the vlans identifiers only
- */
-function vlansIdentifiers(vlans) {
-    var identifiers = [];
-    for (var i = 0; i < vlans.length; i++) {
-        identifiers.push(vlans[i].identifier);
-    }
-    return identifiers;
 }
 
 /**
@@ -590,7 +593,7 @@ function createVlansList() {
     var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>";
     options += "<option value='noVlanSelection'></option>" ;
 
-    for (var i = 0; i < myVlans.length; i++) {
+    for (var i in myVlans) {
         options += "<option value='" + myVlans[i].identifier + "'>";
         options += myVlans[i].identifier + "</option>";
     }
@@ -608,7 +611,7 @@ function displayVlanInfo() {
     var vlans = document.getElementById("vlansDropDown");
     selectedVlanId = vlans.options[vlans.selectedIndex].value
 
-    var vlan = getVlan(selectedVlanId);
+    var vlan = myVlans[selectedVlanId];
 
     var info = "";
 
@@ -662,8 +665,8 @@ function highlightVlanDiffusion(id) {
         var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
 
         if (interfaceFrom != null && interfaceTo != null) {
-            var vlansFrom = vlansIdentifiers(interfaceFrom.vlans);
-            var vlansTo = vlansIdentifiers(interfaceTo.vlans);
+            var vlansFrom = Object.keys(interfaceFrom.vlans);
+            var vlansTo = Object.keys(interfaceTo.vlans);
 
             var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
             var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
@@ -714,18 +717,6 @@ function getDevice(mac) {
 }
 
 /**
- * Get a vlan from its id
- */
-function getVlan(id) {
-    for (var i = 0; i < myVlans.length; i++) {
-        if (myVlans[i].identifier == id) {
-            return myVlans[i];
-        }
-    }
-}
-
-
-/**
  * Get a node from its id
  */
 function getNode(id) {
@@ -745,13 +736,6 @@ function getEdge(id) {
             return edges[i];
         }
     }
-}
-
-/**
- * Verifies whether a vlan already exist or not
- */
-function vlanExists(vlan) {
-    return getVlan(vlan.identifier) != null;
 }
 
 /**

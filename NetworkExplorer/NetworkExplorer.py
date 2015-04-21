@@ -101,7 +101,7 @@ class NetworkExplorer(object):
 
         logging.info("Discovering lldp neighbors for %s...", self.hostname)
 
-        neighbors = self._get_lldp_neighbors(self.device)
+        neighbors = self._build_lldp_neighbors(self.device)
 
         self._close_ssh_connection()
 
@@ -118,15 +118,15 @@ class NetworkExplorer(object):
                     queue.put(neighbor)
 
     def _build_current_device(self):
-        info = self._show_lldp_local_device()
+        info = self._get_lldp_local_device()
         device = self.network_parser.parse_device_from_lldp_local_info(info)
         return device
 
-    def _get_lldp_neighbors(self, device):
+    def _build_lldp_neighbors(self, device):
         """
         Obtain the list of all ldp neighbors
         """
-        neighbors_result = self._show_lldp_neighbors()
+        neighbors_result = self._get_lldp_neighbors()
         device.interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(neighbors_result)
 
@@ -136,7 +136,7 @@ class NetworkExplorer(object):
         for interface in device.interfaces:
             if interface.is_valid_lldp_interface():
                 port = interface.local_port
-                partial_result = self._show_lldp_neighbor_detail(port)
+                partial_result = self._get_lldp_neighbor_detail(port)
 
                 if partial_result is not None:
                     neighbors_result += partial_result
@@ -145,13 +145,13 @@ class NetworkExplorer(object):
             device, neighbors_result)
 
         # TODO Move this to other functions?
-        vlans_result = self._show_vlans()
+        vlans_result = self._get_vlans()
         self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
 
-        trunks_result = self._show_trunks()
+        trunks_result = self._get_trunks()
         device.trunks = self.network_parser.parse_trunks(trunks_result)
 
-        vm_result = self._show_virtual_machines()
+        vm_result = self._get_virtual_machines()
         device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
         # TODO
 
@@ -174,36 +174,36 @@ class NetworkExplorer(object):
 
         # Other devices need to get specific information from each vlan before
         # assigning it one by one to the interfaces
-        for vlan in vlans:
-            specific_result = self._show_vlan_detail(vlan.identifier)
+        for identifier, vlan in vlans.items():
+            specific_result = self._get_vlan_detail(identifier)
             self.network_parser.associate_vlan_to_interfaces(
                 interfaces, vlan, specific_result)
 
-    def _show_lldp_local_device(self):
+    def _get_lldp_local_device(self):
         command = self.network_parser.lldp_local_cmd
         return self._send_ssh_command(command)
 
-    def _show_lldp_neighbors(self):
+    def _get_lldp_neighbors(self):
         command = self.network_parser.lldp_neighbors_cmd
         return self._send_ssh_command(command)
 
-    def _show_lldp_neighbor_detail(self, port):
+    def _get_lldp_neighbor_detail(self, port):
         command = self.network_parser.lldp_neighbors_detail_cmd.format(port)
         return self._send_ssh_command(command)
 
-    def _show_trunks(self):
+    def _get_trunks(self):
         command = self.network_parser.trunks_list_cmd
         return self._send_ssh_command(command)
 
-    def _show_vlans(self):
+    def _get_vlans(self):
         command = self.network_parser.vlans_global_cmd
         return self._send_ssh_command(command)
 
-    def _show_vlan_detail(self, vlan_id):
+    def _get_vlan_detail(self, vlan_id):
         command = self.network_parser.vlans_specific_cmd.format(vlan_id)
         return self._send_ssh_command(command)
 
-    def _show_virtual_machines(self):
+    def _get_virtual_machines(self):
         command = self.network_parser.vms_list_cmd
         return self._send_ssh_command(command)
 

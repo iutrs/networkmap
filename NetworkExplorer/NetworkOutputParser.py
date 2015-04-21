@@ -159,7 +159,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
                          remote_system_name=sys_name)
 
     def parse_vlans(self, result):
-        vlans = []
+        vlans = {}
         try:
             # Here we try to find the index in between the interesting values
             # instead of using regular expressions because the output is not
@@ -179,8 +179,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
                     vlan_id = line[:name_index-1].strip()
                     vlan_name = line[name_index:status_index-1][:-1].strip()
 
-                    vlan = Vlan(identifier=vlan_id, name=vlan_name)
-                    vlans.append(vlan)
+                    vlans[vlan_id] = Vlan(identifier=vlan_id, name=vlan_name)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
@@ -409,7 +408,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
                          remote_system_name=sys_name)
 
     def parse_vlans(self, result):
-        return []
+        return {}
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         try:
@@ -559,7 +558,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                 if ':' in line and line_count > 3:
                     key, value = self._extract_key_and_value_from_line(line)
                     self._attribute_lldp_remote_info(neighbor, interface, key,
-                                                    value)
+                                                     value)
                 elif "----" in line and line_count > 3:
                     if interface.is_valid_lldp_interface():
                         device.interfaces.append(interface)
@@ -581,7 +580,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         """
         This parses the output of the vlans_global_cmd command.
         """
-        vlans = []
+        vlans = {}
         try:
             regex = "(?P<port>[A-z]+[0-9]*)(\.)(?P<vlan>[0-z]+)"
 
@@ -591,11 +590,14 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                     port = match.group("port")
                     vlan_id = match.group("vlan")
 
-                    # We put the port as an identifier here because we will
-                    # need to verify if it is a bonding in the function
-                    # 'associate_vlans_to_interfaces()'
-                    vlan = Vlan(identifier=port, name=vlan_id)
-                    vlans.append(vlan)
+                    # We put the port as the key in the dictionary here
+                    # because we will need an interface, not a vlan identifier
+                    # to enter the 'associate_vlans_to_interfaces()' function.
+                    # We also need to store that information in the vlan
+                    # ('name' attribute) in order to retrieve this information
+                    # so we can verify if it is a bonding in the
+                    # 'associate_vlans_to_interfaces()' function
+                    vlans[port] = Vlan(identifier=vlan_id, name=port)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
@@ -610,11 +612,9 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         This parses the output of the vlans_specific_cmd command.
         """
         try:
-            # Give back the good identifier to the vlan since we needed
-            # an interface (not a vlan like the other devices) in order to
-            # enter this function.
-            ports_affected_by_vlan = [vlan.identifier]
-            vlan.identifier = vlan.name
+            # Retrieve the port previously stored in the vlan name.
+            # See 'parse_vlans' function.
+            ports_affected_by_vlan = [vlan.name]
             vlan.name = None
 
             for line in result.splitlines():
@@ -628,9 +628,9 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                     ports = line.split()
 
                     # Since there aren't any command to show trunks on Linux,
-                    # we store theses bonding to return them later in the 
+                    # we store theses bonding to return them later in the
                     # 'parse_trunks()' function
-                    group = ports_affected_by_vlan[0] # The old vlan identifier
+                    group = ports_affected_by_vlan[0]  # Old vlan name
                     self.trunks[group] = Trunk(group=group, ports=ports)
 
                     ports_affected_by_vlan = ports

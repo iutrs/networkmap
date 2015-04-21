@@ -28,26 +28,39 @@ class NetworkOutputParser(object):
             elif "Cisco" in line:
                 return None
 
-    @staticmethod
-    def assign_vlan_to_interface(vlan, interface):
-        """Add the vlan to the interface if it doesnt already exists.
-        :param vlan: The vlan to be assign
-        :type vlan: Vlan()
-        :param vlan: The interface
-        :type interface: Interface()
-        """
-        for v in interface.vlans:
-            if v.identifier == vlan.identifier:
-                return
-        interface.vlans.append(vlan)
+    def parse_device_from_lldp_local_info(self, result):
+        raise NotImplementedError()
 
-    @staticmethod
-    def extract_key_and_value_from_line(line):
+    def parse_devices_from_lldp_remote_info(self, device, result):
+        raise NotImplementedError()
+
+    def parse_interfaces_from_lldp_remote_info(self, result):
+        raise NotImplementedError()
+
+    def parse_vlans(self, result):
+        raise NotImplementedError()
+
+    def associate_vlans_to_interfaces(self, interfaces, result):
+        raise NotImplementedError()
+
+    def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
+        raise NotImplementedError()
+
+    def parse_trunks(self, trunks_result):
+        raise NotImplementedError()
+
+    def parse_vms_list(self, vm_result):
+        raise NotImplementedError()
+
+    def _parse_interface_from_line(self, line):
+        raise NotImplementedError()
+
+    def _extract_key_and_value_from_line(self, line):
         """Substring the key and the value separated from the first
          occurrence of ':' in the provided string
         :param line: The line as a string
         :type line: str
-        :return: The extracted key and value
+        :return: The extracted key and value as a tuple
         :rtype: (str, str)
         """
         tokens = line.split(':', 1)
@@ -55,6 +68,12 @@ class NetworkOutputParser(object):
         value = tokens[1].strip()
 
         return (key, value)
+
+    def _attribute_lldp_local_info(self, device, key, value):
+        raise NotImplementedError()
+
+    def _attribute_lldp_remote_info(self, device, key, value):
+        raise NotImplementedError()
 
 
 class HPNetworkOutputParser(NetworkOutputParser):
@@ -70,15 +89,15 @@ class HPNetworkOutputParser(NetworkOutputParser):
         self.vlans_specific_cmd = "show vlans {0}\n"
         self.vms_list_cmd = None
 
-    def parse_device_from_lldp_local_info(self, lldp_result):
+    def parse_device_from_lldp_local_info(self, result):
         device = Device()
 
         try:
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_local_info(device, key, value)
+                    self._attribute_lldp_local_info(device, key, value)
 
                     if key == "Address":
                         break
@@ -86,21 +105,21 @@ class HPNetworkOutputParser(NetworkOutputParser):
         except Exception as e:
             device = None
             logging.error("Could not parse network device from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return device
 
-    def parse_devices_from_lldp_remote_info(self, device, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, device, result):
         devices = []
 
         try:
             neighbor = Device()
 
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_remote_info(neighbor, key, value)
+                    self._attribute_lldp_remote_info(neighbor, key, value)
 
                 elif '#' in line:
                     devices.append(neighbor)
@@ -108,22 +127,22 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
         except Exception as e:
             logging.error("Could not parse network devices from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return devices
 
-    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
+    def parse_interfaces_from_lldp_remote_info(self, result):
         interfaces = []
 
         try:
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if len(line) > 57 and line[12] == '|':
                     interface = self._parse_interface_from_line(line)
                     if interface.local_port != 'LocalPort':
                         interfaces.append(interface)
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return interfaces
 
@@ -205,7 +224,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
                     for interface in interfaces:
                         if interface.local_port == interface_id:
-                            self._assign_vlan_to_interface(new_vlan, interface)
+                            interface.add_vlan(new_vlan)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)",
@@ -259,7 +278,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
     def parse_vms_list(self, vm_result):
         return []
 
-    def attribute_lldp_remote_info(self, device, key, value):
+    def _attribute_lldp_remote_info(self, device, key, value):
         if "ChassisId" in key:
             device.mac_address = value
         elif "SysName" in key:
@@ -277,7 +296,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
         else:
             pass
 
-    def attribute_lldp_local_info(self, device, key, value):
+    def _attribute_lldp_local_info(self, device, key, value):
         if "Chassis Id" in key:
             device.mac_address = value
         elif "System Name" in key:
@@ -295,12 +314,6 @@ class HPNetworkOutputParser(NetworkOutputParser):
         else:
             pass
 
-    def _assign_vlan_to_interface(self, vlan, interface):
-        return NetworkOutputParser.assign_vlan_to_interface(vlan, interface)
-
-    def _extract_key_and_value_from_line(self, line):
-        return NetworkOutputParser.extract_key_and_value_from_line(line)
-
 
 class JuniperNetworkOutputParser(NetworkOutputParser):
     """Parses the output of Juniper switches."""
@@ -316,15 +329,15 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         self.vlans_specific_cmd = None
         self.vms_list_cmd = None
 
-    def parse_device_from_lldp_local_info(self, lldp_result):
+    def parse_device_from_lldp_local_info(self, result):
         device = Device()
 
         try:
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_local_info(device, key, value)
+                    self._attribute_lldp_local_info(device, key, value)
 
                     if key == "Enabled":
                         break
@@ -332,11 +345,11 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         except Exception as e:
             device = None
             logging.error("Could not parse network device from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return device
 
-    def parse_devices_from_lldp_remote_info(self, device, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, device, result):
         devices = []
 
         try:
@@ -348,14 +361,14 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
             skip_line = True
             neighbor = Device()
 
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if "Neighbour Information" in line:
                     skip_line = False
 
                 if ':' in line and not skip_line:
                     key, value = self._extract_key_and_value_from_line(line)
 
-                    self.attribute_lldp_remote_info(neighbor, key, value)
+                    self._attribute_lldp_remote_info(neighbor, key, value)
 
                 if "Address" in line and not skip_line:
                     devices.append(neighbor)
@@ -364,22 +377,22 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
         except Exception as e:
             logging.error("Could not parse network devices from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return devices
 
-    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
+    def parse_interfaces_from_lldp_remote_info(self, result):
         interfaces = []
 
         try:
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
                 if len(line) > 73:
                     interface = self._parse_interface_from_line(line)
                     if interface.local_port != "Local Interface":
                         interfaces.append(interface)
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return interfaces
 
@@ -433,7 +446,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
                         for interface in interfaces:
                             if interface.local_port == p:
-                                self._assign_vlan_to_interface(vlan, interface)
+                                interface.add_vlan(vlan)
 
                     if "Tagged" in line:
                         vlan = Vlan()
@@ -481,7 +494,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
     def parse_vms_list(self, vm_result):
         return []
 
-    def attribute_lldp_remote_info(self, device, key, value):
+    def _attribute_lldp_remote_info(self, device, key, value):
         if "Chassis ID" in key:
             device.mac_address = value.replace(':', ' ')
         elif "System name" in key:
@@ -499,7 +512,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         else:
             pass
 
-    def attribute_lldp_local_info(self, device, key, value):
+    def _attribute_lldp_local_info(self, device, key, value):
         if "Chassis ID" in key:
             device.mac_address = value.replace(':', ' ')
         elif "System name" in key:
@@ -512,12 +525,6 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
             device.enabled_capabilities = value
         else:
             pass
-
-    def _assign_vlan_to_interface(self, vlan, interface):
-        return NetworkOutputParser.assign_vlan_to_interface(vlan, interface)
-
-    def _extract_key_and_value_from_line(self, line):
-        return NetworkOutputParser.extract_key_and_value_from_line(line)
 
 
 class LinuxNetworkOutputParser(NetworkOutputParser):
@@ -535,23 +542,23 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
 
         self.trunks = {}
 
-    def parse_device_from_lldp_local_info(self, lldp_result):
+    def parse_device_from_lldp_local_info(self, result):
         #TODO
         return Device()
 
-    def parse_devices_from_lldp_remote_info(self, device, lldp_result):
+    def parse_devices_from_lldp_remote_info(self, device, result):
         devices = []
         try:
             neighbor = Device()
             interface = Interface()
             line_count = 0
 
-            for line in lldp_result.splitlines():
+            for line in result.splitlines():
 
                 line_count += 1
                 if ':' in line and line_count > 3:
                     key, value = self._extract_key_and_value_from_line(line)
-                    self.attribute_lldp_remote_info(neighbor, interface, key,
+                    self._attribute_lldp_remote_info(neighbor, interface, key,
                                                     value)
                 elif "----" in line and line_count > 3:
                     if interface.is_valid_lldp_interface():
@@ -563,11 +570,11 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
 
         except Exception as e:
             logging.error("Could not extract devices from : %s. (%s)",
-                          lldp_result, e)
+                          result, e)
 
         return devices
 
-    def parse_interfaces_from_lldp_remote_info(self, lldp_result):
+    def parse_interfaces_from_lldp_remote_info(self, result):
         return []
 
     def parse_vlans(self, result):
@@ -631,7 +638,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                 for port in ports_affected_by_vlan:
                     for interface in interfaces:
                         if interface.local_port == port:
-                            self._assign_vlan_to_interface(vlan, interface)
+                            interface.add_vlan(vlan)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
@@ -675,7 +682,10 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
 
         return vms
 
-    def attribute_lldp_remote_info(self, device, interface, key, value):
+    def _attribute_lldp_local_info(self, device, key, value):
+        raise NotImplementedError()
+
+    def _attribute_lldp_remote_info(self, device, interface, key, value):
         if "Interface" in key:
             interface.local_port = value[:value.find(',')]
         elif "ChassisID" in key:
@@ -696,9 +706,3 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
             interface.remote_port = value
         else:
             pass
-
-    def _assign_vlan_to_interface(self, vlan, interface):
-        return NetworkOutputParser.assign_vlan_to_interface(vlan, interface)
-
-    def _extract_key_and_value_from_line(self, line):
-        return NetworkOutputParser.extract_key_and_value_from_line(line)

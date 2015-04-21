@@ -82,10 +82,8 @@ def _initialize_logger(logfile):
 
 
 def _write_results_to_file(results, outputfile):
-    output = "["
-    for key, value in results.items():
-        output += "{0},\n".format(value.to_JSON())
-    output = output[:-2] + "]"
+    values = ",\n".join(value.to_JSON() for value in results.values())
+    output = "[" + values + "]"
 
     with open(outputfile, "w") as _file:
         _file.write(output.encode('utf8'))

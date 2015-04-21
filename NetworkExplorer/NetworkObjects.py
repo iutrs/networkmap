@@ -95,6 +95,12 @@ class Interface(NetworkObject):
         self.remote_system_name = remote_system_name
         self.vlans = vlans or []
 
+    def add_vlan(self, vlan):
+        for v in self.vlans:
+            if v.identifier == vlan.identifier:
+                return
+        self.vlans.append(vlan)
+
     def is_valid_lldp_interface(self):
         return \
             (

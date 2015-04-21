@@ -46,7 +46,7 @@ class NetworkOutputParser(object):
     def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
         raise NotImplementedError()
 
-    def parse_trunks(self, trunks_result):
+    def parse_trunks(self, interfaces, trunks_result):
         raise NotImplementedError()
 
     def parse_vms_list(self, vm_result):
@@ -56,13 +56,6 @@ class NetworkOutputParser(object):
         raise NotImplementedError()
 
     def _extract_key_and_value_from_line(self, line):
-        """Substring the key and the value separated from the first
-         occurrence of ':' in the provided string
-        :param line: The line as a string
-        :type line: str
-        :return: The extracted key and value as a tuple
-        :rtype: (str, str)
-        """
         tokens = line.split(':', 1)
         key = tokens[0].strip()
         value = tokens[1].strip()
@@ -89,18 +82,22 @@ class HPNetworkOutputParser(NetworkOutputParser):
         self.vlans_specific_cmd = "show vlans {0}\n"
         self.vms_list_cmd = None
 
+        self.vlans_affected_to_trunks = {}
+
     def parse_device_from_lldp_local_info(self, result):
         device = Device()
 
         try:
             for line in result.splitlines():
-                if ':' in line:
-                    key, value = self._extract_key_and_value_from_line(line)
+                if not ':' in line:
+                    continue
 
-                    self._attribute_lldp_local_info(device, key, value)
+                key, value = self._extract_key_and_value_from_line(line)
 
-                    if key == "Address":
-                        break
+                self._attribute_lldp_local_info(device, key, value)
+
+                if key == "Address":
+                    break
 
         except Exception as e:
             device = None
@@ -167,17 +164,20 @@ class HPNetworkOutputParser(NetworkOutputParser):
             targets = ["Name", "Status"]
             name_index = None
             status_index = None
+            indexes = [None]
 
             for line in result.splitlines():
                 if all(t in line for t in targets):
                     name_index = line.find(targets[0])
                     status_index = line.find(targets[1])
-                elif "----" not in line and \
-                     name_index is not None and status_index is not None and \
-                     line.strip() != "" and not self.wait_string in line:
+                    indexes = [name_index, status_index]
+                elif "----" not in line and line.strip() != "" and not \
+                     self.wait_string in line and \
+                     all(t is not None for t in indexes):
 
                     vlan_id = line[:name_index-1].strip()
-                    vlan_name = line[name_index:status_index-1][:-1].strip()
+                    raw_name = line[name_index:status_index-1]
+                    vlan_name = raw_name.replace('|', '').strip()
 
                     vlans[vlan_id] = Vlan(identifier=vlan_id, name=vlan_name)
 
@@ -185,6 +185,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
         return vlans
+
+    def get_vlan_detail_str(self, vlan):
+        return vlan.identifier
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         pass
@@ -194,14 +197,13 @@ class HPNetworkOutputParser(NetworkOutputParser):
             # Here we try to find the index in between the interesting values
             # instead of using regular expressions because the output is not
             # the same on every HP switch.
+            targets = ["Mode", "Unknown VLAN", "Status"]
             mode_index = None
             unknown_index = None
             status_index = None
             indexes = [None]
 
             for line in specific_result.splitlines():
-                targets = ["Mode", "Unknown VLAN", "Status"]
-
                 if all(t in line for t in targets):
                     mode_index = line.find(targets[0])
                     unknown_index = line.find(targets[1])
@@ -221,6 +223,10 @@ class HPNetworkOutputParser(NetworkOutputParser):
                                     mode=vlan_mode,
                                     status=vlan_status)
 
+                    if "Trk" in interface_id:
+                        self._save_vlan_affected_to_trunk(new_vlan,
+                                                          interface_id)
+
                     for interface in interfaces:
                         if interface.local_port == interface_id:
                             interface.add_vlan(new_vlan)
@@ -229,7 +235,13 @@ class HPNetworkOutputParser(NetworkOutputParser):
             logging.error("Could not extract vlans from : %s. (%s)",
                           specific_result, e)
 
-    def parse_trunks(self, trunks_result):
+    def _save_vlan_affected_to_trunk(self, vlan, trunk_id):
+        if trunk_id in self.vlans_affected_to_trunks:
+            self.vlans_affected_to_trunks[trunk_id].append(vlan)
+        else:
+            self.vlans_affected_to_trunks[trunk_id] = [vlan]
+
+    def parse_trunks(self, interfaces, trunks_result):
         """
         Example of "show trunks" command result:
 
@@ -256,23 +268,41 @@ class HPNetworkOutputParser(NetworkOutputParser):
             for line in trunks_result.splitlines():
 
                 match = re.search(regex, line)
-                if match:
-                    port = match.group("port").strip()
-                    name = match.group("name").strip()
-                    type = match.group("type").strip()
-                    group = match.group("group").strip()
+                if not match:
+                    continue
 
-                    if group in trunks:
-                        trunks[group].ports.append(port)
-                    else:
-                        trunks[group] = Trunk(group=group, name=name,
-                                              type=type, ports=[port])
+                port = match.group("port").strip()
+                name = match.group("name").strip()
+                type = match.group("type").strip()
+                group = match.group("group").strip()
+
+                # 'group' is considered as the identifier of the trunk
+                if group in trunks:
+                    trunks[group].ports.append(port)
+                else:
+                    trunks[group] = Trunk(group=group, name=name,
+                                          type=type, ports=[port])
+
+                # Update the interface with the vlans that were previously
+                # affected to the trunks.
+                self._update_vlans_on_interfaces(port, group, interfaces)
 
         except Exception as e:
             logging.error("Could not parse trunk from : %s. (%s)",
                           trunks_result, e)
 
         return trunks
+
+    def _update_vlans_on_interfaces(self, port, trunk_id, interfaces):
+        if trunk_id not in self.vlans_affected_to_trunks:
+            logging.warning("Incoherence warning: Trunk named '%s' doesn't \
+                            have any vlans.", trunk_id)
+            return
+
+        for vlan in self.vlans_affected_to_trunks[trunk_id]:
+            for interface in interfaces:
+                if interface.local_port == port:
+                    interface.add_vlan(vlan)
 
     def parse_vms_list(self, vm_result):
         return []
@@ -333,13 +363,15 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
         try:
             for line in result.splitlines():
-                if ':' in line:
-                    key, value = self._extract_key_and_value_from_line(line)
+                if not ':' in line:
+                    continue
 
-                    self._attribute_lldp_local_info(device, key, value)
+                key, value = self._extract_key_and_value_from_line(line)
 
-                    if key == "Enabled":
-                        break
+                self._attribute_lldp_local_info(device, key, value)
+
+                if key == "Enabled":
+                    break
 
         except Exception as e:
             device = None
@@ -385,10 +417,13 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
         try:
             for line in result.splitlines():
-                if len(line) > 73:
-                    interface = self._parse_interface_from_line(line)
-                    if interface.local_port != "Local Interface":
-                        interfaces.append(interface)
+                if len(line) <= 73:
+                    continue
+
+                interface = self._parse_interface_from_line(line)
+                if interface.local_port != "Local Interface":
+                    interfaces.append(interface)
+
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
                           result, e)
@@ -409,6 +444,9 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
     def parse_vlans(self, result):
         return {}
+
+    def get_vlan_detail_str(self, vlan):
+        return vlan.identifier
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         try:
@@ -453,7 +491,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
-    def parse_trunks(self, trunks_result):
+    def parse_trunks(self, interfaces, trunks_result):
         """
         Example of "show lldp neighbors" command result:
 
@@ -475,15 +513,16 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
         try:
             for line in trunks_result.splitlines():
-                if len(line) > 38:
-                    port = line[:18].strip()
-                    name = line[19:38].strip()
-                    if name in trunks:
-                        trunks[name].ports.append(port)
-                    elif name != "-" and name != "Parent Interface":
-                        trunks[name] = Trunk(group=name,
-                                             name=name,
-                                             ports=[port])
+                if len(line) <= 38:
+                    continue
+
+                port = line[:18].strip()
+                name = line[19:38].strip()
+                if name in trunks:
+                    trunks[name].ports.append(port)
+                elif name != "-" and name != "Parent Interface":
+                    trunks[name] = Trunk(group=name, name=name, ports=[port])
+
         except Exception as e:
             logging.error("Could not parse trunks from : %s. (%s)",
                           trunks_result, e)
@@ -553,8 +592,8 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
             line_count = 0
 
             for line in result.splitlines():
-
                 line_count += 1
+
                 if ':' in line and line_count > 3:
                     key, value = self._extract_key_and_value_from_line(line)
                     self._attribute_lldp_remote_info(neighbor, interface, key,
@@ -586,23 +625,26 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
 
             for line in result.splitlines():
                 match = re.search(regex, line)
-                if match:
-                    port = match.group("port")
-                    vlan_id = match.group("vlan")
+                if not match:
+                    continue
 
-                    # We put the port as the key in the dictionary here
-                    # because we will need an interface, not a vlan identifier
-                    # to enter the 'associate_vlans_to_interfaces()' function.
-                    # We also need to store that information in the vlan
-                    # ('name' attribute) in order to retrieve this information
-                    # so we can verify if it is a bonding in the
-                    # 'associate_vlans_to_interfaces()' function
-                    vlans[port] = Vlan(identifier=vlan_id, name=port)
+                port = match.group("port")
+                vlan_id = match.group("vlan")
+
+                # We need to store the port as the vlan 'name' attribute so
+                # we can enter the 'associate_vlans_to_interfaces()' function
+                # in order to verify if it is a bonding.
+                vlans[vlan_id] = Vlan(identifier=vlan_id, name=port)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
         return vlans
+
+    def get_vlan_detail_str(self, vlan):
+        # The vlan name is the port/bonding previously set in 'parse_vlans'
+        # function.
+        return vlan.name
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         pass
@@ -630,7 +672,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                     # Since there aren't any command to show trunks on Linux,
                     # we store theses bonding to return them later in the
                     # 'parse_trunks()' function
-                    group = ports_affected_by_vlan[0]  # Old vlan name
+                    group = ports_affected_by_vlan[0]  # Old vlan "name"
                     self.trunks[group] = Trunk(group=group, ports=ports)
 
                     ports_affected_by_vlan = ports
@@ -643,7 +685,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
-    def parse_trunks(self, trunks_result):
+    def parse_trunks(self, interfaces, trunks_result):
         return self.trunks
 
     def parse_vms_list(self, vm_result):

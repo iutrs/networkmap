@@ -149,7 +149,8 @@ class NetworkExplorer(object):
         self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
 
         trunks_result = self._get_trunks()
-        device.trunks = self.network_parser.parse_trunks(trunks_result)
+        device.trunks = self.network_parser.parse_trunks(device.interfaces,
+                                                         trunks_result)
 
         vm_result = self._get_virtual_machines()
         device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
@@ -174,8 +175,9 @@ class NetworkExplorer(object):
 
         # Other devices need to get specific information from each vlan before
         # assigning it one by one to the interfaces
-        for identifier, vlan in vlans.items():
-            specific_result = self._get_vlan_detail(identifier)
+        for vlan in vlans.values():
+            detail_str = self.network_parser.get_vlan_detail_str(vlan)
+            specific_result = self._get_vlan_detail(detail_str)
             self.network_parser.associate_vlan_to_interfaces(
                 interfaces, vlan, specific_result)
 

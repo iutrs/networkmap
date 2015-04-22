@@ -105,6 +105,9 @@ function createNodes() {
         if (device.interfaces.length == 0) {
             color = unaccessibleSwitchColor;
         }
+        else if (device.system_description.contains("Linux")) {
+	    color = serverDefaultColor;
+	}
 
         posX = undefined;
         posY = undefined;

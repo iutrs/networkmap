@@ -29,6 +29,11 @@ var unaccessibleSwitchColor = "#C5000B";
 var serverDefaultColor = "#00FFBF";
 var vmDefaultColor = "#FF9900";
 
+const ICONS_DIR = './css/img/hardware/';
+const SWITCH = ICONS_DIR + "switch.png"
+const SERVER = ICONS_DIR + "server.png"
+const WARNING = ICONS_DIR + "warning.png"
+
 // General options
 var showvms = false;
 var freezeSimulation = true;
@@ -76,7 +81,11 @@ function draw() {
                 nodeDistance: 75,
                 damping: 1
             }
-        }
+        },
+        nodes: {
+            widthMin: 48,
+            widthMax: 72
+          },
     };
 
     var container = document.getElementById('networkmap');
@@ -101,13 +110,16 @@ function createNodes() {
         var device = devices[i];
 
         var color = nodeDefaultColor;
+        var img = SWITCH;
 
         var interfacesLength = Object.keys(device.interfaces).length
         if (interfacesLength == 0) {
             color = unaccessibleSwitchColor;
+            img = WARNING;
         }
         else if (device.system_description.contains("Linux")) {
             color = serverDefaultColor;
+            img = SERVER;
         }
 
         posX = undefined;
@@ -123,8 +135,9 @@ function createNodes() {
         {
             'id': device.mac_address,
             'label': device.system_name + "\n" + device.ip_address,
-            'shape': 'square',
+            'shape': 'image',
             'color': color,
+            'image': img,
             'value': interfacesLength + 1,
             'mass': interfacesLength + 1,
             'x': posX,
@@ -162,7 +175,7 @@ function createVmsNodes(device) {
             'from': device.mac_address,
             'to': device.mac_address + "/" + vm.name,
             'style': 'line',
-            'color': vmDefaultColor,
+            'color': linkDefaultColor,
             'width': 2,
         });
     }
@@ -192,6 +205,7 @@ function createEdges() {
                         'from': link[0],
                         'to': link[1],
                         'style': 'line',
+                        'color': linkDefaultColor,
                         'width': 2,
                         'labelFrom': labelFrom,
                         'labelTo': labelTo

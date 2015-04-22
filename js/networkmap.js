@@ -242,7 +242,7 @@ function getStringifiedInterfaceTrunk(int_port, device) {
         }
 
         if (interfaceIsTrunked) {
-            return stringfiedTrunk.slice(0, - 1) + ")";
+            return stringfiedTrunk.slice(0, -1) + ")";
         }
 
     }
@@ -338,7 +338,7 @@ function prepareSearchEngine() {
 function addGeneralOptions() {
     var content = "<b>General settings:</b></br>";
 
-    var chkShowVms = "<input type='checkbox' name='showvms'";
+    var chkShowVms = "<input type='checkbox' id='chkShowvms'";
     chkShowVms += this.showvms ? "checked " : " ";
     chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>";
 
@@ -361,11 +361,11 @@ function addGeneralOptions() {
  */
 function toggleCheckbox(element)
 {
-    if (element.name == "showvms") {
+    if (element.id == "chkShowvms") {
         this.showvms = element.checked;
         draw(); //TODO Find a way to make it load faster
     }
-    else if (element.name == "freezeSimulation") {
+    else if (element.id == "chkFreezeSimulation") {
         this.freezeSimulation = element.checked;
         network.freezeSimulation(this.freezeSimulation);
     }

@@ -1,7 +1,7 @@
 const jsonFile = "devices.json";
 var devices = null;
 
-// The JSON must be fully loaded before onload() happens for calling draw() on 'devices'  
+// The JSON must be fully loaded before onload() happens for calling draw() on 'devices'
 $.ajaxSetup({
     async: false
 });
@@ -102,12 +102,13 @@ function createNodes() {
 
         var color = nodeDefaultColor;
 
-        if (device.interfaces.length == 0) {
+        var interfacesLength = Object.keys(device.interfaces).length
+        if (interfacesLength == 0) {
             color = unaccessibleSwitchColor;
         }
         else if (device.system_description.contains("Linux")) {
-	    color = serverDefaultColor;
-	}
+            color = serverDefaultColor;
+        }
 
         posX = undefined;
         posY = undefined;
@@ -124,8 +125,8 @@ function createNodes() {
             'label': device.system_name + "\n" + device.ip_address,
             'shape': 'square',
             'color': color,
-            'value': device.interfaces.length + 1,
-            'mass': device.interfaces.length + 1,
+            'value': interfacesLength + 1,
+            'mass': interfacesLength + 1,
             'x': posX,
             'y': posY,
             'allowedToMoveX': posX == undefined,
@@ -175,8 +176,8 @@ function createEdges() {
     for (var i = 0; i < devices.length; i++) {
         device = devices[i];
 
-        for (var j = 0; j < device.interfaces.length; j++) {
-            var int = device.interfaces[j];
+        for (var index in device.interfaces) {
+            var int = device.interfaces[index];
             var link = [device.mac_address, int.remote_mac_address];
 
             if (nodeExists(int.remote_mac_address) && !edgeExists(link)) {
@@ -210,7 +211,7 @@ function addSearchOptions() {
     var txtSearch = "<input id='txtSearch' class='typeahead' type='text'";
     txtSearch += " placeholder='Find a device' onchange='selectNode(undefined, false)'>";
     var btnFocus = "<button id='btnFocus' onclick='toggleFocusOnNode()'>Focus</button>";
-    
+
     var content = txtSearch + btnFocus;
 
     document.getElementById('deviceSearch').innerHTML = content + "<hr>";
@@ -230,7 +231,7 @@ function toggleFocusOnNode() {
     else {
         selectNode(undefined, true);
     }
-    
+
     focusedOnNode = !focusedOnNode;
 }
 
@@ -430,7 +431,7 @@ function buildNodeDescription(device) {
         "<b>" + ip_type + ":</b> " + ip + "</br>" +
         "<b>MAC:</b> " + device.mac_address + "</br>" +
         "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
-        buildConnectedPortsList(device) + 
+        buildConnectedPortsList(device) +
         buildVirtualMachinesList(device)
     )
 }
@@ -443,9 +444,8 @@ function buildConnectedPortsList(device) {
     var connectedPorts = "<b>Connected interfaces:</b></br>";
     var otherCount = 0;
 
-    for (var i = 0; i < device.interfaces.length; i++) {
-        var int = device.interfaces[i];
-
+    for (var index in device.interfaces) {
+        var int = device.interfaces[index];
         if (int.remote_system_name == "") {
             otherCount++;
         }
@@ -461,7 +461,7 @@ function buildConnectedPortsList(device) {
         connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>";
     }
 
-    return device.interfaces.length > 0 ? connectedPorts : ""; 
+    return Object.keys(device.interfaces).length > 0 ? connectedPorts : "";
 }
 
 /**
@@ -478,7 +478,7 @@ function buildVirtualMachinesList(device) {
         output += line + "</br>";
     }
 
-    return device.virtual_machines.length > 0 ? output : ""; 
+    return device.virtual_machines.length > 0 ? output : "";
 }
 
 /**
@@ -680,7 +680,7 @@ function highlightVlanDiffusion(id) {
             }
             else if (notApplicable) {
                 edge.width = 2;
-                edge.color = linkDefaultColor; 
+                edge.color = linkDefaultColor;
             }
             else {
                 edge.width = 8;
@@ -700,8 +700,8 @@ function getInterfaceConnectedTo(device, macAdress) {
         return null;
     }
 
-    for (var i = 0; i < device.interfaces.length; i++) {
-        var int = device.interfaces[i];
+    for (var index in device.interfaces) {
+        var int = device.interfaces[index];
         if (int.remote_mac_address == macAdress) {
             return int;
         }

@@ -128,7 +128,7 @@ class Device(NetworkObject):
         self.system_description = system_description
         self.supported_capabilities = supported_capabilities or ""
         self.enabled_capabilities = enabled_capabilities or ""
-        self.interfaces = interfaces or []
+        self.interfaces = interfaces or {}
         self.trunks = trunks or {}
         self.virtual_machines = virtual_machines or []
 

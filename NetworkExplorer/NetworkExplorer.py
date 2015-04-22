@@ -133,7 +133,7 @@ class NetworkExplorer(object):
         if len(device.interfaces) > 0:
             neighbors_result = ""
 
-        for interface in device.interfaces:
+        for interface in device.interfaces.values():
             if interface.is_valid_lldp_interface():
                 port = interface.local_port
                 partial_result = self._get_lldp_neighbor_detail(port)

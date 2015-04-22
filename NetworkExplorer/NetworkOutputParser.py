@@ -129,14 +129,14 @@ class HPNetworkOutputParser(NetworkOutputParser):
         return devices
 
     def parse_interfaces_from_lldp_remote_info(self, result):
-        interfaces = []
+        interfaces = {}
 
         try:
             for line in result.splitlines():
                 if len(line) > 57 and line[12] == '|':
                     interface = self._parse_interface_from_line(line)
                     if interface.local_port != 'LocalPort':
-                        interfaces.append(interface)
+                        interfaces[interface.local_port] = interface
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
                           result, e)
@@ -227,9 +227,8 @@ class HPNetworkOutputParser(NetworkOutputParser):
                         self._save_vlan_affected_to_trunk(new_vlan,
                                                           interface_id)
 
-                    for interface in interfaces:
-                        if interface.local_port == interface_id:
-                            interface.add_vlan(new_vlan)
+                    if interface_id in interfaces:
+                        interfaces[interface_id].add_vlan(new_vlan)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)",
@@ -299,10 +298,9 @@ class HPNetworkOutputParser(NetworkOutputParser):
                             have any vlans.", trunk_id)
             return
 
-        for vlan in self.vlans_affected_to_trunks[trunk_id]:
-            for interface in interfaces:
-                if interface.local_port == port:
-                    interface.add_vlan(vlan)
+        if port in interfaces:
+            for vlan in self.vlans_affected_to_trunks[trunk_id]:
+                interfaces[port].add_vlan(vlan)
 
     def parse_vms_list(self, vm_result):
         return []
@@ -413,7 +411,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
         return devices
 
     def parse_interfaces_from_lldp_remote_info(self, result):
-        interfaces = []
+        interfaces = {}
 
         try:
             for line in result.splitlines():
@@ -422,7 +420,7 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
                 interface = self._parse_interface_from_line(line)
                 if interface.local_port != "Local Interface":
-                    interfaces.append(interface)
+                    interfaces[interface.local_port] = interface
 
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
@@ -481,9 +479,8 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
                             else:
                                 vlan.status = VlanStatus.INACTIVE
 
-                        for interface in interfaces:
-                            if interface.local_port == p:
-                                interface.add_vlan(vlan)
+                            if p in interfaces:
+                                interfaces[p].add_vlan(vlan)
 
                     if "Tagged" in line:
                         vlan = Vlan()
@@ -600,7 +597,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                                                      value)
                 elif "----" in line and line_count > 3:
                     if interface.is_valid_lldp_interface():
-                        device.interfaces.append(interface)
+                        device.interfaces[interface.local_port] = interface
                         interface = Interface()
 
                     devices.append(neighbor)
@@ -613,7 +610,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         return devices
 
     def parse_interfaces_from_lldp_remote_info(self, result):
-        return []
+        return {}
 
     def parse_vlans(self, result):
         """
@@ -678,9 +675,8 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                     ports_affected_by_vlan = ports
 
                 for port in ports_affected_by_vlan:
-                    for interface in interfaces:
-                        if interface.local_port == port:
-                            interface.add_vlan(vlan)
+                    if port in interfaces:
+                        interfaces[port].add_vlan(vlan)
 
         except Exception as e:
             logging.error("Could not extract vlans from : %s. (%s)", result, e)

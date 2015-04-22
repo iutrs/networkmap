@@ -180,16 +180,26 @@ function createEdges() {
             var int = device.interfaces[index];
             var link = [device.mac_address, int.remote_mac_address];
 
-            if (nodeExists(int.remote_mac_address) && !edgeExists(link)) {
+            var deviceTo = getDevice(int.remote_mac_address);
+
+            if (deviceTo && !edgeExists(link)) {
+                var labels = buildEdgeLabels(device, deviceTo, int);
+                var labelFrom = labels[0];
+                var labelTo = labels[1];
+
                 edges.push(
                     {
                         'from': link[0],
                         'to': link[1],
                         'style': 'line',
                         'width': 2,
-                        'labelFrom': int.local_port,
-                        'labelTo': int.remote_port
+                        'labelFrom': labelFrom,
+                        'labelTo': labelTo
                     });
+            }
+            else if (!edgeExists(link) && int.remote_system_name != ""){
+                // TODO Should we display these nodes?
+                console.log("Unexisting node : " + int.remote_system_name)
             }
 
             for (var index in int.vlans) {
@@ -203,7 +213,44 @@ function createEdges() {
     return edges;
 }
 
-/*
+/**
+ * Build the edge labels depending if the link is trunked or not.
+ */
+ function buildEdgeLabels(deviceFrom, deviceTo, int) {
+    var labelFrom = getStringifiedInterfaceTrunk(int.local_port, deviceFrom);
+    var labelTo = getStringifiedInterfaceTrunk(int.remote_port, deviceTo);
+
+    return [labelFrom, labelTo]
+ }
+ 
+/**
+ * Returns the trunk associated to an interface if it exists.
+ */
+function getStringifiedInterfaceTrunk(int_port, device) {
+    for (var trunkId in device.trunks) {
+        var trunk = device.trunks[trunkId];
+
+        var stringfiedTrunk = trunk.group + "\n(";
+        var interfaceIsTrunked = false;
+
+        for (var p = 0; p < trunk.ports.length; p++) {
+            var port = trunk.ports[p];
+            if (int_port == port) {
+                interfaceIsTrunked = true;
+            }
+            stringfiedTrunk += port + " "
+        }
+
+        if (interfaceIsTrunked) {
+            return stringfiedTrunk.slice(0, - 1) + ")";
+        }
+
+    }
+
+    return int_port;
+}
+
+/**
  * Add the html controls to search and focus on a specific device/node
  */
 function addSearchOptions() {
@@ -219,7 +266,7 @@ function addSearchOptions() {
     prepareSearchEngine();
 }
 
-/*
+/**
  * Select the node associated the specified system name.
  * If no argument is given (or undefined), it will try to select the node
  * with the system name entered in the search box.
@@ -229,13 +276,13 @@ function toggleFocusOnNode() {
         network.zoomExtent({duration:0});
     }
     else {
-        selectNode(undefined, true);
+        selectNode(undefined, zoom=true);
     }
 
     focusedOnNode = !focusedOnNode;
 }
 
-/*
+/**
  * Select the node associated the specified system name.
  * If no argument is given (or undefined), it will try to select the node
  * with the system name entered in the search box.
@@ -261,7 +308,7 @@ function selectNode(sysName, zoom) {
     }
 }
 
-/*
+/**
  * Preparing the autocompletion search engine for the devices
  * TODO Upgrade the search with regex
  */

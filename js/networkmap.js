@@ -131,7 +131,7 @@ function createNodes() {
             img = SWITCH_UNREACHABLE_IMG;
             title = SWITCH_UNREACHABLE_TITLE;
         }
-        else if (device.system_description.contains("Linux")) {
+        else if (device.system_description && device.system_description.contains("Linux")) {
             color = serverDefaultColor;
             img = SERVER_IMG;
             title = SERVER_TITLE;
@@ -556,8 +556,11 @@ function buildConnectedPortsList(device) {
     var connectedPorts = "<b>Connected interfaces:</b></br>";
     var otherCount = 0;
 
-    for (var index in device.interfaces) {
-        var int = device.interfaces[index];
+    var interfaces = Object.keys(device.interfaces).map(function(key){return device.interfaces[key];});
+    interfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
+
+    for (var i = 0; i < interfaces.length; i++) {
+        var int = interfaces[i];
         if (int.remote_system_name == "") {
             otherCount++;
         }
@@ -597,55 +600,83 @@ function buildVirtualMachinesList(device) {
  * Buils edge description
  */
 function buildEdgeDescription(edge) {
-    var macAdressFrom = edge.from;
-    var macAdressTo = edge.to;
 
-    var deviceFrom = getDevice(macAdressFrom);
-    var deviceTo = getDevice(macAdressTo);
+    var deviceFrom = getDevice(edge.from);
+    var deviceTo = getDevice(edge.to);
 
-    var interfaceFrom = getInterfaceConnectedTo(deviceFrom, macAdressTo);
-    var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
+    var content = "";
 
-    var vlansIdsFrom = [];
-    var vlansFrom = [];
-    if (interfaceFrom != null) {
-        for (var index in interfaceFrom.vlans) {
-            vlansIdsFrom.push(index);
-            vlansFrom.push(interfaceFrom.vlans[index]);
+    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+
+    var contentFrom = (interfacesFrom != null) ? "" : "Interfaces unreachable.";
+    var contentTo = (interfacesTo != null) ? "" : "Interfaces unreachable.";
+
+    // We need tuples to compare vlans on same link
+    var tuples = getInterfaceTuples(interfacesFrom, interfacesTo);
+
+    for (var i = 0; i < tuples.length; i++) {
+        var contentFrom = "<b>" + deviceFrom.system_name + "</b></br>";
+        var contentTo = "<b>" + deviceTo.system_name + "</b></br>";
+
+        // Interface from
+        var intFrom = tuples[i][0];
+
+        var vlansOnInterface = getVlansOnInterface(intFrom);
+        var vlansIdsFrom = vlansOnInterface[0];
+        var vlansFrom = vlansOnInterface[1];
+
+        // Interface to
+        var intTo = tuples[i][1];
+
+        vlansOnInterface = getVlansOnInterface(intTo);
+        var vlansIdsTo = vlansOnInterface[0];
+        var vlansTo = vlansOnInterface[1];
+
+        // Vlan differences
+        var vlanDifferences = vlansIdsTo.diff(vlansIdsFrom)
+
+        if (vlansFrom.length > 0) {
+            contentFrom += "Vlans on <b>" + intFrom.local_port + "</b>&nbsp:</br>";
+            contentFrom += vlansToString(vlansFrom, intFrom.mac_address, vlanDifferences);
         }
-    }
-
-    var vlansIdsTo = [];
-    var vlansTo = [];
-    if (interfaceTo != null) {
-        for (var index in interfaceTo.vlans) {
-            vlansIdsTo.push(index);
-            vlansTo.push(interfaceTo.vlans[index]);
+        else {
+            contentFrom += "No vlans on <b>" + intFrom.local_port + "</b>";
         }
+
+        if (vlansTo.length > 0) {
+            contentTo += "Vlans on <b>" + intTo.local_port + "</b>&nbsp:</br>";
+            contentTo += vlansToString(vlansTo, intTo.mac_address, vlanDifferences);
+        }
+        else {
+            contentTo += "No vlans on <b>" + intTo.local_port + "</b>";
+        }
+
+        content += contentFrom + "</br>" + contentTo + "</br></br>";
     }
-
-    var contentFrom = "<b>" + deviceFrom.system_name + "</b></br>";
-    var contentTo = "<b>" + deviceTo.system_name + "</b></br>";
-
-    // TODO Specify the error message
-    contentFrom += (interfaceFrom != null) ? "" : "No vlans could be found.";
-    contentTo += (interfaceTo != null) ? "" : "No vlans could be found.";
-
-    var differences = vlansIdsTo.diff(vlansIdsFrom)
-
-    if (vlansFrom.length > 0) {
-        contentFrom += "Vlans on <b>" + interfaceFrom.local_port + "</b>&nbsp:</br>";
-        contentFrom += vlansToString(vlansFrom, macAdressFrom, differences);
-    }
-
-    if (vlansTo.length > 0) {
-        contentTo += "Vlans on <b>" + interfaceTo.local_port + "</b>&nbsp:</br>";
-        contentTo += vlansToString(vlansTo, macAdressTo, differences);
-    }
-
-    var content = contentFrom + "</br>" + contentTo + "</br>";
 
     return content;
+}
+
+/**
+ * Join corresponding interfaces of two connected devices as tuples.
+ */
+function getInterfaceTuples(interfacesFrom, interfacesTo) {
+    var tuples = [];
+    for (var i = 0; i < interfacesFrom.length; i++) {
+        var intFrom = interfacesFrom[i];
+
+        for (var j = 0; j < interfacesTo.length; j++) {
+            var intTo = interfacesTo[i];
+
+            // Remote port and local port on both ends must correspond
+            if (intFrom.remote_port == intTo.local_port && intFrom.local_port == intTo.remote_port) {
+                tuples.push([intFrom, intTo])
+                // TODO DO NOT PUSH IF ALREADY EXISTING
+            }
+        }
+    }
+    return tuples;
 }
 
 /**
@@ -666,23 +697,15 @@ function vlansToString(vlans, str, differences) {
 }
 
 /**
- * Generate vlan info (tooltip + div)
+ * Generate vlan info (tooltip when hovering)
  */
 function vlansInfo(vlan, ref, color) {
     // tooltip
     var string = "<a href='#" + ref + "' title='";
     string += "Name: " + vlan.name + "\n";
     string += "Mode: " + vlan.mode + "\n";
-    string += "Status: " + vlan.status + "'";
-
-    // <div> toggle
-    string += " onclick=\"toggle('" + ref + "');\">";
+    string += "Status: " + vlan.status + "'>";
     string += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
-    string += "<small><div id='" + ref + "' style='display: none;'> ";
-    string += "<font color='" + color + "'>";
-    string += "(<b>Name:</b> " + vlan.name + ", ";
-    string += "<b>Mode:</b> " + vlan.mode + ", ";
-    string += "<b>Status:</b> " + vlan.status + ")</font></div></small>";
 
     return string;
 }
@@ -841,6 +864,25 @@ function getInterfacesConnectedTo(deviceFrom, deviceTo) {
     connectedInterfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
 
     return connectedInterfaces;
+}
+
+/**
+ * Returns a list of all the vlan identifiers and the vlan themselves
+ */
+function getVlansOnInterface(int) {
+    vlansIds = [];
+    vlans = [];
+
+    if (int != null) {
+        for (var index in int.vlans) {
+            vlansIds.push(index);
+            vlans.push(int.vlans[index]);
+        }
+        vlansIds.sort();
+        vlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)});
+    }
+
+    return [vlansIds, vlans]
 }
 
 /**

@@ -31,12 +31,20 @@ var vmDefaultColor = "#FF9900";
 
 // Images path
 const ICONS_DIR = './css/img/hardware/';
-const SWITCH = ICONS_DIR + "switch.png"
-const SERVER = ICONS_DIR + "server.png"
-const SWITCH_WARNING = ICONS_DIR + "switch_warning.png"
-const SERVER_WARNING = ICONS_DIR + "server_warning.png"
-const SWITCH_UNREACHABLE = ICONS_DIR + "switch_unreachable.png"
-const SERVER_UNREACHABLE = ICONS_DIR + "server_unreachable.png"
+const SWITCH_IMG = ICONS_DIR + "switch.png"
+const SERVER_IMG = ICONS_DIR + "server.png"
+const SWITCH_WARNING_IMG = ICONS_DIR + "switch_warning.png"
+const SERVER_WARNING_IMG = ICONS_DIR + "server_warning.png"
+const SWITCH_UNREACHABLE_IMG = ICONS_DIR + "switch_unreachable.png"
+const SERVER_UNREACHABLE_IMG = ICONS_DIR + "server_unreachable.png"
+
+// Title for images
+const SWITCH_TITLE = undefined;
+const SERVER_TITLE = undefined;
+const SWITCH_WARNING_TITLE = "Incoherences found."
+const SERVER_WARNING_TITLE = "Incoherences found."
+const SWITCH_UNREACHABLE_TITLE = "Switch unreachable."
+const SERVER_UNREACHABLE_TITLE = "Server unreachable."
 
 // General options
 var showvms = false;
@@ -114,16 +122,19 @@ function createNodes() {
         var device = devices[i];
 
         var color = nodeDefaultColor;
-        var img = SWITCH;
+        var img = SWITCH_IMG;
+        var title = SWITCH_TITLE;
 
         var interfacesLength = Object.keys(device.interfaces).length
         if (interfacesLength == 0) {
             color = unaccessibleSwitchColor;
-            img = SWITCH_UNREACHABLE;
+            img = SWITCH_UNREACHABLE_IMG;
+            title = SWITCH_UNREACHABLE_TITLE;
         }
         else if (device.system_description.contains("Linux")) {
             color = serverDefaultColor;
-            img = SERVER;
+            img = SERVER_IMG;
+            title = SERVER_TITLE;
         }
 
         posX = undefined;
@@ -142,6 +153,7 @@ function createNodes() {
             'shape': 'image',
             'color': color,
             'image': img,
+            'title': title,
             'value': interfacesLength + 1,
             'mass': interfacesLength + 1,
             'x': posX,

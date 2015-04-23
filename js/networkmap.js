@@ -29,10 +29,14 @@ var unaccessibleSwitchColor = "#C5000B";
 var serverDefaultColor = "#00FFBF";
 var vmDefaultColor = "#FF9900";
 
+// Images path
 const ICONS_DIR = './css/img/hardware/';
 const SWITCH = ICONS_DIR + "switch.png"
 const SERVER = ICONS_DIR + "server.png"
-const WARNING = ICONS_DIR + "warning.png"
+const SWITCH_WARNING = ICONS_DIR + "switch_warning.png"
+const SERVER_WARNING = ICONS_DIR + "server_warning.png"
+const SWITCH_UNREACHABLE = ICONS_DIR + "switch_unreachable.png"
+const SERVER_UNREACHABLE = ICONS_DIR + "server_unreachable.png"
 
 // General options
 var showvms = false;
@@ -115,7 +119,7 @@ function createNodes() {
         var interfacesLength = Object.keys(device.interfaces).length
         if (interfacesLength == 0) {
             color = unaccessibleSwitchColor;
-            img = WARNING;
+            img = SWITCH_UNREACHABLE;
         }
         else if (device.system_description.contains("Linux")) {
             color = serverDefaultColor;

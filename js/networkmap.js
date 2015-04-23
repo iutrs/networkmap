@@ -247,16 +247,37 @@ function createEdges() {
  * Build the edge labels depending if the link is trunked or not.
  */
  function buildEdgeLabels(deviceFrom, deviceTo, int) {
-    var labelFrom = getStringifiedInterfaceTrunk(int.local_port, deviceFrom);
-    var labelTo = getStringifiedInterfaceTrunk(int.remote_port, deviceTo);
+
+    var labelFrom = int.local_port;
+
+    var stringifiedTrunk = getStringifiedTrunk(int.local_port, deviceFrom);
+    if (stringifiedTrunk) {
+        labelFrom = stringifiedTrunk;
+    }
+    else {
+        var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+        labelFrom = getStringifiedInterface(interfacesFrom) || labelFrom;
+    }
+
+
+    var labelTo = int.remote_port;
+
+    var stringifiedTrunk = getStringifiedTrunk(int.remote_port, deviceTo);
+    if (stringifiedTrunk) {
+        labelTo = stringifiedTrunk;
+    }
+    else {
+        var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+        labelTo = getStringifiedInterface(interfacesTo) || labelTo;
+    }
 
     return [labelFrom, labelTo]
  }
- 
+
 /**
- * Returns the trunk associated to an interface if it exists.
+ * Returns the stringified version of the trunk associated to an interface if it exists.
  */
-function getStringifiedInterfaceTrunk(int_port, device) {
+function getStringifiedTrunk(int_port, device) {
     for (var trunkId in device.trunks) {
         var trunk = device.trunks[trunkId];
 
@@ -274,10 +295,23 @@ function getStringifiedInterfaceTrunk(int_port, device) {
         if (interfaceIsTrunked) {
             return stringfiedTrunk.slice(0, -1) + ")";
         }
+    }
+}
 
+/**
+ * Returns the stringified version of an interface.
+ */
+function getStringifiedInterface(interfaces) {
+    if (interfaces == null || interfaces.length <= 1) {
+        return null;
     }
 
-    return int_port;
+    var stringifiedInterface = "(";
+    for (var i = 0; i < interfaces.length; i++) {
+        stringifiedInterface += interfaces[i].local_port + " ";
+    }
+
+    return stringifiedInterface = stringifiedInterface.slice(0, -1) + ")";
 }
 
 /**
@@ -301,6 +335,7 @@ function addSearchOptions() {
  * If no argument is given (or undefined), it will try to select the node
  * with the system name entered in the search box.
  */
+
 function toggleFocusOnNode() {
     if (focusedOnNode) {
         network.zoomExtent({duration:0});
@@ -785,6 +820,29 @@ function getInterfaceConnectedTo(device, macAdress) {
     }
 }
 
+
+/**
+ * Returns a list of all the interfaces connected from a device to another.
+ */
+function getInterfacesConnectedTo(deviceFrom, deviceTo) {
+
+    if (!(deviceFrom && deviceTo)) {
+        return null;
+    }
+
+    var connectedInterfaces = [];
+
+    for (var index in deviceFrom.interfaces) {
+        var int = deviceFrom.interfaces[index];
+        if (int.remote_mac_address == deviceTo.mac_address) {
+            connectedInterfaces.push(int);
+        }
+    }
+    connectedInterfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
+
+    return connectedInterfaces;
+}
+
 /**
  * Get a device from its mac address
  */
@@ -926,3 +984,23 @@ Array.prototype.diff = function(other) {
     }
     return diff;
 };
+
+/**
+ * Compare strings with numbers more "naturallly".
+ * http://stackoverflow.com/questions/15478954/sort-array-elements-string-with-numbers-natural-sort/15479354#15479354
+ */
+function naturalCompare(a, b) {
+    var ax = [], bx = [];
+
+    a.replace(/(\d+)|(\D+)/g, function(_, $1, $2) { ax.push([$1 || Infinity, $2 || ""]) });
+    b.replace(/(\d+)|(\D+)/g, function(_, $1, $2) { bx.push([$1 || Infinity, $2 || ""]) });
+
+    while(ax.length && bx.length) {
+        var an = ax.shift();
+        var bn = bx.shift();
+        var nn = (an[0] - bn[0]) || an[1].localeCompare(bn[1]);
+        if(nn) return nn;
+    }
+
+    return ax.length - bx.length;
+}

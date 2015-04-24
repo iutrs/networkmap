@@ -47,6 +47,7 @@ const SWITCH_UNREACHABLE_TITLE = "Switch unreachable."
 const SERVER_UNREACHABLE_TITLE = "Server unreachable."
 
 // General options
+//TODO Save to localStorage
 var showvms = false;
 var freezeSimulation = true;
 
@@ -103,11 +104,11 @@ function draw() {
     var container = document.getElementById('networkmap');
 
     network = new vis.Network(container, data, options);
-    network.freezeSimulation(true);
+    network.freezeSimulation(this.freezeSimulation);
     nodesPosition = network.getPositions();
 
-    addSearchOptions();
-    addGeneralOptions();
+    prepareSearchEngine();
+    setGeneralOptionsAttributes();
 
     addEventsListeners();
 
@@ -315,22 +316,6 @@ function getStringifiedInterface(interfaces) {
 }
 
 /**
- * Add the html controls to search and focus on a specific device/node
- */
-function addSearchOptions() {
-
-    var txtSearch = "<input id='txtSearch' class='typeahead' type='text'";
-    txtSearch += " placeholder='Find a device' onchange='selectNode(undefined, false)'>";
-    var btnFocus = "<button id='btnFocus' onclick='toggleFocusOnNode()'>Focus</button>";
-
-    var content = txtSearch + btnFocus;
-
-    document.getElementById('deviceSearch').innerHTML = content + "<hr>";
-
-    prepareSearchEngine();
-}
-
-/**
  * Select the node associated the specified system name.
  * If no argument is given (or undefined), it will try to select the node
  * with the system name entered in the search box.
@@ -354,7 +339,7 @@ function toggleFocusOnNode() {
  */
 function selectNode(sysName, zoom) {
     if (sysName == undefined) {
-        sysName = document.getElementById('txtSearch').value;
+        sysName = document.getElementById('deviceSearch').value;
     }
 
     if (sysName == "") {
@@ -386,7 +371,7 @@ function prepareSearchEngine() {
 
     engine.initialize();
 
-    $('#deviceSearch .typeahead').typeahead({
+    $('#deviceSearch').typeahead({
         hint: true,
         highlight: true,
         minLength: 1
@@ -400,40 +385,28 @@ function prepareSearchEngine() {
 /**
  * Adding the general options
  */
-function addGeneralOptions() {
-    var content = "<b>General settings:</b></br>";
+function setGeneralOptionsAttributes() {
+    this.showvms ? $("#chkShowvms").attr("checked", "checked") : $("#chkShowvms").removeAttr("checked");
 
-    var chkShowVms = "<input type='checkbox' id='chkShowvms'";
-    chkShowVms += this.showvms ? "checked " : " ";
-    chkShowVms += "onchange='toggleCheckbox(this);'> Show virtual machines <br>";
+    this.freezeSimulation ? $("#chkFreezeSimulation").attr("checked", "checked") : $("#chkFreezeSimulation").removeAttr("checked");
 
-    var chkFreezeSimulation = "<input type='checkbox' id='chkFreezeSimulation' ";
-    chkFreezeSimulation += this.freezeSimulation ? "checked " : " ";
-    chkFreezeSimulation += "onchange='toggleCheckbox(this);'> Freeze simulation <br>";
+}
 
-    var btnStorePositions = "<button type='button' id='btnStorePositions' ";
-    btnStorePositions += "onclick='storePositions();'> Store positions </button><br>";
 
-    var btnClearPositions = "<button type='button' id='btnClearPositions' ";
-    btnClearPositions += "onclick='clearPositions();'> Clear positions </button><br>";
-
-    content += chkShowVms + chkFreezeSimulation + btnStorePositions + btnClearPositions;
-    document.getElementById('general').innerHTML = content + "<hr>";
+/**
+ * Handle checkbox clicking to show virtual machines nodes or not.
+ */
+function showVmsNodes() {
+    this.showvms = !this.showvms;
+    draw(); //TODO Find a way to make it load faster
 }
 
 /**
- * Handling checkbox clicking
+ * Handle checkbox clicking to freeze the simulation or not.
  */
-function toggleCheckbox(element)
-{
-    if (element.id == "chkShowvms") {
-        this.showvms = element.checked;
-        draw(); //TODO Find a way to make it load faster
-    }
-    else if (element.id == "chkFreezeSimulation") {
-        this.freezeSimulation = element.checked;
-        network.freezeSimulation(this.freezeSimulation);
-    }
+function freezeNetworkSimulation() {
+    this.freezeSimulation = !this.freezeSimulation;
+    network.freezeSimulation(this.freezeSimulation);
 }
 
 /**
@@ -505,9 +478,9 @@ function onNodeSelect(nodeId) {
 
     var content = buildNodeDescription(device);
 
-    document.getElementById('selectionInfo').innerHTML = content + "<hr>";
+    document.getElementById('selectionInfo').innerHTML = content;
 
-    document.getElementById('txtSearch').value = device.system_name;
+    document.getElementById('deviceSearch').value = device.system_name;
     network.selectNodes([nodeId]);
     focusedOnNode = false;
 }
@@ -520,7 +493,7 @@ function onEdgeSelect(edge) {
 
     var content = buildEdgeDescription(edge);
 
-    document.getElementById('selectionInfo').innerHTML = content + "<hr>";
+    document.getElementById('selectionInfo').innerHTML = content;
 }
 
 /**
@@ -699,45 +672,30 @@ function vlansToString(vlans, str, differences) {
  * Generate vlan info (tooltip when hovering)
  */
 function vlansInfo(vlan, ref, color) {
-    // tooltip
-    var string = "<a href='#" + ref + "' title='";
-    string += "Name: " + vlan.name + "\n";
-    string += "Mode: " + vlan.mode + "\n";
-    string += "Status: " + vlan.status + "'>";
-    string += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
+    var tooltip = "Name: " + vlan.name + "\n";
+    tooltip += "Mode: " + vlan.mode + "\n";
+    tooltip += "Status: " + vlan.status;
 
-    return string;
-}
+    var info = "<a data-original-title='' data-container='body' data-toggle='popover' data-placement='top'";
+    info += " data-content='" + tooltip + "' title='" + tooltip + "' >";
+    info += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
 
-/**
- * Show or hide a div by its id
- */
-function toggle(divId) {
-   if (document.getElementById(divId)) {
-      if (document.getElementById(divId).style.display == 'none') {
-         document.getElementById(divId).style.display = 'inline';
-      }
-      else {
-         document.getElementById(divId).style.display = 'none';
-      }
-   }
+    return info;
 }
 
 /**
  * Generates a dropdown list containing all the vlans identifier
  */
 function createVlansList() {
-    var options = "<b>Vlan:</b> <select id='vlansDropDown' onchange='displayVlanInfo()'>";
-    options += "<option value='noVlanSelection'></option>" ;
+    $("#vlansDropDown").append("<option value='noVlanSelection'></option>");
 
     for (var i in myVlans) {
-        options += "<option value='" + myVlans[i].identifier + "'>";
-        options += myVlans[i].identifier + "</option>";
+        var option = "<option value='" + myVlans[i].identifier + "'>" + myVlans[i].identifier + "</option>";
+         $("#vlansDropDown").append(option);
     }
-    options += "</select></br>";
 
-    document.getElementById("vlanSelect").innerHTML = options;
-    document.getElementById("vlansDropDown").value = selectedVlanId;
+    $("#vlansDropDown").val(selectedVlanId);
+
     displayVlanInfo();
 }
 
@@ -748,30 +706,19 @@ function displayVlanInfo() {
     var vlans = document.getElementById("vlansDropDown");
     selectedVlanId = vlans.options[vlans.selectedIndex].value
 
+    store("selectedVlanId", selectedVlanId, false);
+
+    var vlanInfo = "<label>No vlan selected.</label>";
+
     var vlan = myVlans[selectedVlanId];
 
-    var info = "";
-
     if (vlan != undefined) {
-        info += "<span><b>Name:</b> " + vlan.name + "</span><br>";
-
-        var colorPicker = "<input id='vlanDiffusionColorPicker' type='color'";
-        colorPicker += "onchange='updateColor(vlanDiffusionColorPicker.value, \"vlanDiffusionColor\")'";
-        colorPicker += "value='" + vlanDiffusionColor + "'>";
-
-        info += colorPicker + "<span><b>&nbspDiffusion</b></span></br>";
-
-        var colorPicker = "<input id='vlanIncoherenceColorPicker' type='color'";
-        colorPicker += "onchange='updateColor(vlanIncoherenceColorPicker.value, \"vlanIncoherenceColor\")'";
-        colorPicker += "value='" + vlanIncoherenceColor + "'>";
-
-        info += colorPicker + "<span><b>&nbspIncoherences</b></span>";
+        vlanInfo = "<label>Name:</label>&nbsp" + vlan.name;
     }
 
-    document.getElementById("vlanInfo").innerHTML = info + "<hr>";
+    document.getElementById("vlanInfo").innerHTML = vlanInfo;
 
     highlightVlanDiffusion(selectedVlanId);
-    store("selectedVlanId", selectedVlanId, false);
 }
 
 /**
@@ -789,6 +736,10 @@ function updateColor(color, variable) {
  * Highlights the diffusion of the selected vlan
  */
 function highlightVlanDiffusion(id) {
+
+    $("#vlanDiffusionColorPicker").val(vlanDiffusionColor);
+    $("#vlanIncoherenceColorPicker").val(vlanIncoherenceColor);
+
     for (var i = 0; i < edges.length; i++) {
         var edge = edges[i];
 

@@ -8,21 +8,154 @@
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
     <script type="text/javascript" src="./js/networkmap.js"></script>
     <script type="text/javascript" src="./js/typeahead.bundle.min.js"></script>
+    <!-- Bootstrap sb-admin-2 theme (js)-->
+    <script type="text/javascript" src="./js/sb-admin-2/sb-admin-2.js"></script>
+    <script type="text/javascript" src="./js/sb-admin-2/metisMenu.js"></script>
+
 
     <link type="text/css" href="./css/vis.css" rel="stylesheet"/>
     <link type="text/css" href="./css/networkmap.css" rel="stylesheet"/>
     <link type="text/css" href="./css/typeahead.css" rel="stylesheet"/>
+    <link type="text/css" href="./css/bootstrap.min.css" rel="stylesheet"/>
+    <link type="text/css" href="./css/font-awesome.min.css" rel="stylesheet"/>
+    <!-- Bootstrap sb-admin-2 theme (css)-->
+    <link type="text/css" href="./css/sb-admin-2/sb-admin-2.css" rel="stylesheet"/>
+    <link type="text/css" href="./css/sb-admin-2/metisMenu.css" rel="stylesheet"/>
 </head>
 
 <body onload="draw();" onresize="network.redraw();" onkeypress="onKeyPress(event);">
 
-    <div id="networkmap"></div>
-    <div id="options">
-        <div id="deviceSearch"></div>
-        <div id="general"></div>
-        <div id="vlanSelect"><b>No vlan found</b><hr></div>
-        <div id="vlanInfo"></div>
-        <div id="selectionInfo"><b>No selection</b><hr></div>
+    <div id="wrapper" class="row col-lg-12">
+
+        <!-- Network section -->
+        <div class="col-lg-9 col-md-12 col-sm-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Network
+                </div>
+                <div class="panel-body" id="networkmap">
+                    <!-- The network is drawn here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Options section -->
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Options
+                </div>
+                <div class="panel-body" id="options">
+
+                    <!-- Search options -->
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            Search
+                        </div>
+                        <div class="panel-body" id="search">
+                            <input class="form-control typeahead" id="deviceSearch" type="text" \
+                                placeholder="Find a device" onchange="selectNode(undefined, false)">
+                            </input>
+                            <div>
+                                <button class="btn btn-default" id="btnFocus" onclick="toggleFocusOnNode()">
+                                    Focus
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /Search options -->
+
+                    <!-- General options -->
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            General
+                        </div>
+                        <div class="panel-body" id="general">
+
+                            <div class="form-group">
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" id="chkShowvms" \
+                                            onchange="showVmsNodes();">
+                                                Show virtual machines
+                                        </input>
+                                    </label>
+                                </div>
+                                <div class="checkbox">
+                                    <label>
+                                        <input type="checkbox" id="chkFreezeSimulation" \
+                                            onchange="freezeNetworkSimulation();">
+                                                Freeze simulation
+                                        </input>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <button type="button" class="btn btn-default" id="btnStorePositions" \
+                                    onclick="storePositions();">
+                                        Store positions
+                                </button>
+                                <button type="button" class="btn btn-default" id="btnClearPositions" \
+                                    onclick='clearPositions();'>
+                                        Clear positions
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- /General options -->
+
+                    <!-- Vlans options -->
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            Vlans
+                        </div>
+                        <div class="panel-body" id="vlans">
+
+                            <div id="vlanSelect" class="form-group form-inline">
+                                <label>Vlan:</label>
+                                <select id="vlansDropDown" class="form-control selectWidth" \
+                                    onchange="displayVlanInfo()">
+                                </select>
+                            </div>
+                            <div id="vlanInfo" class="form-group form-inline">
+                                <!-- The vlan info is generated by the javascript. -->
+                            </div>
+
+                            <div class="form-group form-inline">
+                                <label>Diffusion:</label>
+                                <input id="vlanDiffusionColorPicker" type="color" \
+                                    onchange="updateColor(this.value, 'vlanDiffusionColor')">
+                                </input>
+                            </div>
+
+                            <div class="form-group form-inline">
+                                <label>Incoherences:</label>
+                                <input id="vlanIncoherenceColorPicker" type="color" \
+                                    onchange="updateColor(this.value, 'vlanIncoherenceColor')">
+                                </input>
+                            </div>
+
+                        </div>
+                    </div>
+                    <!-- /Vlans options -->
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Details section -->
+        <div class="col-lg-3 col-md-6 col-sm-6">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    Details
+                </div>
+                <div class="panel-body" id="details">
+                    <div id="selectionInfo"><b>No selection</b></div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
 </body>

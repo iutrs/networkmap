@@ -609,8 +609,8 @@ function buildEdgeDescription(edge) {
     var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
     var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
 
-    var contentFrom = (interfacesFrom != null) ? "" : "Interfaces unreachable.";
-    var contentTo = (interfacesTo != null) ? "" : "Interfaces unreachable.";
+    var contentFrom = (interfacesFrom.length > 0) ? "" : "No interface was found.";
+    var contentTo = (interfacesTo.length > 0) ? "" : "No interface was found.";
 
     // We need tuples to compare vlans on same link
     var tuples = getInterfaceTuples(interfacesFrom, interfacesTo);
@@ -667,12 +667,11 @@ function getInterfaceTuples(interfacesFrom, interfacesTo) {
         var intFrom = interfacesFrom[i];
 
         for (var j = 0; j < interfacesTo.length; j++) {
-            var intTo = interfacesTo[i];
+            var intTo = interfacesTo[j];
 
             // Remote port and local port on both ends must correspond
             if (intFrom.remote_port == intTo.local_port && intFrom.local_port == intTo.remote_port) {
                 tuples.push([intFrom, intTo])
-                // TODO DO NOT PUSH IF ALREADY EXISTING
             }
         }
     }
@@ -850,7 +849,7 @@ function getInterfaceConnectedTo(device, macAdress) {
 function getInterfacesConnectedTo(deviceFrom, deviceTo) {
 
     if (!(deviceFrom && deviceTo)) {
-        return null;
+        return [];
     }
 
     var connectedInterfaces = [];

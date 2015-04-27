@@ -30,7 +30,7 @@ var serverDefaultColor = "#00FFBF";
 var vmDefaultColor = "#FF9900";
 
 // Images path
-const ICONS_DIR = './css/img/hardware/';
+const ICONS_DIR = "./css/img/hardware/";
 const SWITCH_IMG = ICONS_DIR + "switch.png"
 const SERVER_IMG = ICONS_DIR + "server.png"
 const SWITCH_WARNING_IMG = ICONS_DIR + "switch_warning.png"
@@ -61,7 +61,7 @@ var nodesPosition = getPositions();
 function draw() {
     if (devices == null) {
         errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>";
-        document.getElementById('networkmap').innerHTML = errorMessage;
+        $("#networkmap").html(errorMessage);
     }
 
     nodes = [];
@@ -101,7 +101,8 @@ function draw() {
           },
     };
 
-    var container = document.getElementById('networkmap');
+    // Using jQuery to get the element does not work with vis.js library
+    var container = document.getElementById("networkmap")
 
     network = new vis.Network(container, data, options);
     network.freezeSimulation(this.freezeSimulation);
@@ -180,7 +181,7 @@ function createVmsNodes(device) {
         {
             'id': device.mac_address + "/" + vm.name,
             'label': vm.name,
-            'shape': 'square',
+            'shape': "square",
             'color': vmDefaultColor,
             'title': undefined,
             'value': 1,
@@ -191,7 +192,7 @@ function createVmsNodes(device) {
         {
             'from': device.mac_address,
             'to': device.mac_address + "/" + vm.name,
-            'style': 'line',
+            'style': "line",
             'color': linkDefaultColor,
             'width': 2,
         });
@@ -221,7 +222,7 @@ function createEdges() {
                     {
                         'from': link[0],
                         'to': link[1],
-                        'style': 'line',
+                        'style': "line",
                         'color': linkDefaultColor,
                         'width': 2,
                         'labelFrom': labelFrom,
@@ -339,7 +340,7 @@ function toggleFocusOnNode() {
  */
 function selectNode(sysName, zoom) {
     if (sysName == undefined) {
-        sysName = document.getElementById('deviceSearch').value;
+        sysName = $("#deviceSearch").val();
     }
 
     if (sysName == "") {
@@ -364,20 +365,20 @@ function selectNode(sysName, zoom) {
  */
 function prepareSearchEngine() {
     var engine = new Bloodhound({
-        datumTokenizer: Bloodhound.tokenizers.obj.whitespace('system_name', 'ip_address'),
+        datumTokenizer: Bloodhound.tokenizers.obj.whitespace("system_name", "ip_address"),
         queryTokenizer: Bloodhound.tokenizers.whitespace,
         local: this.devices
     });
 
     engine.initialize();
 
-    $('#deviceSearch').typeahead({
+    $("#deviceSearch").typeahead({
         hint: true,
         highlight: true,
         minLength: 1
     },
     {
-        displayKey: 'system_name',
+        displayKey: "system_name",
         source: engine.ttAdapter()
     });
 }
@@ -412,7 +413,7 @@ function freezeNetworkSimulation() {
  * Manage the key presses events
  */
 function onKeyPress(event){
-    var charCode = ('charCode' in event) ? event.charCode : event.keyCode;
+    var charCode = ("charCode" in event) ? event.charCode : event.keyCode;
     console.log("Unicode '" + charCode + "' was pressed.");
 }
 
@@ -420,9 +421,9 @@ function onKeyPress(event){
  * Adding the events listeners
  */
 function addEventsListeners() {
-    network.on('doubleClick', onDoubleClick);
-    network.on('dragEnd', onDragEnd);
-    network.on('select', onSelect);
+    network.on("doubleClick", onDoubleClick);
+    network.on("dragEnd", onDragEnd);
+    network.on("select", onSelect);
 }
 
 /**
@@ -476,10 +477,9 @@ function onNodeSelect(nodeId) {
     var device = getDevice(nodeId);
 
     var content = buildNodeDescription(device);
+    $("#selectionInfo").html(content);
 
-    document.getElementById('selectionInfo').innerHTML = content;
-
-    document.getElementById('deviceSearch').value = device.system_name;
+    $("#deviceSearch").val(device.system_name);
     network.selectNodes([nodeId]);
     focusedOnNode = false;
 }
@@ -490,7 +490,8 @@ function onNodeSelect(nodeId) {
 function onEdgeSelect(edge) {
     var edge = getEdge(edge);
 
-    document.getElementById('selectionInfo').innerHTML = buildEdgeDescription(edge);
+    var content = buildEdgeDescription(edge);
+    $("#selectionInfo").html(content);
 }
 
 /**
@@ -713,8 +714,10 @@ function createVlansList() {
     $("#vlansDropDown").append("<option value='noVlanSelection'></option>");
 
     for (var i in myVlans) {
-        var option = "<option value='" + myVlans[i].identifier + "'>" + myVlans[i].identifier + "</option>";
-         $("#vlansDropDown").append(option);
+        var option = "<option value='" + myVlans[i].identifier + "'>";
+        option += myVlans[i].identifier + "</option>";
+
+        $("#vlansDropDown").append(option);
     }
 
     $("#vlansDropDown").val(selectedVlanId);
@@ -726,8 +729,8 @@ function createVlansList() {
  * Display the information of the selected vlan
  */
 function displayVlanInfo() {
-    var vlans = document.getElementById("vlansDropDown");
-    selectedVlanId = vlans.options[vlans.selectedIndex].value
+
+    selectedVlanId = $('#vlansDropDown>option:selected').text();
 
     store("selectedVlanId", selectedVlanId, false);
 
@@ -739,7 +742,7 @@ function displayVlanInfo() {
         vlanInfo = "<label>Name:</label>&nbsp" + vlan.name;
     }
 
-    document.getElementById("vlanInfo").innerHTML = vlanInfo;
+    $("#vlanInfo").html(vlanInfo);
 
     highlightVlanDiffusion(selectedVlanId);
 }

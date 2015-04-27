@@ -8,12 +8,12 @@ Date   : Mars 2015
 
 import json
 
-HP_DEVICES = ["HP", "Hewlett-Packard", "ProCurve"]
-JUNIPER_DEVICES = ["Juniper", "JUNOS"]
-LINUX_DEVICES = ["Linux", "Debian", "Ubuntu"]
+HP_DEVICES = ("HP", "Hewlett-Packard", "ProCurve")
+JUNIPER_DEVICES = ("Juniper", "JUNOS")
+LINUX_DEVICES = ("Linux", "Debian", "Ubuntu")
 
 SUPPORTED_DEVICES = HP_DEVICES + JUNIPER_DEVICES + LINUX_DEVICES
-SUPPORTED_TYPES = ["bridge", "Bridge"]
+SUPPORTED_TYPES = ("bridge", "Bridge")
 
 
 class VlanMode():
@@ -142,9 +142,18 @@ class Device(NetworkObject):
                 any(d in self.system_description for d in SUPPORTED_DEVICES)
             )
 
-    def is_linux_server(self):
-        return \
-            (
-                self.system_description is not None and
-                any(d in self.system_description for d in LINUX_DEVICES)
-            )
+    @property
+    def type(self):
+        if self.system_description is None:
+            return None
+
+        type_map = {
+            HP_DEVICES: "hp",
+            JUNIPER_DEVICES: "juniper",
+            LINUX_DEVICES: "linux"}
+
+        for pattern_list, code in type_map.iteritems():
+            if any(string in self.system_description for string in pattern_list):
+                return code
+        else:
+            return None

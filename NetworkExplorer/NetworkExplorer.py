@@ -14,12 +14,11 @@ import logging
 import paramiko
 
 from NetworkOutputParser import *
+from auth_manager import AuthManager, AuthConfigError
 
 DEFAULT_TIMEOUT = 10
 DEFAULT_MAX_BYTES = 1024
 DEFAULT_MAX_ATTEMPTS = 1
-DEFAULT_USERNAME = "root"
-DEFAULT_PASSWORD = None
 
 
 class NetworkExplorer(object):
@@ -30,13 +29,11 @@ class NetworkExplorer(object):
 
     def __init__(self,
                  device,
+                 parser,
                  ignore_list=None,
                  ssh_timeout=DEFAULT_TIMEOUT,
                  ssh_max_bytes=DEFAULT_MAX_BYTES,
-                 ssh_max_attempts=DEFAULT_MAX_ATTEMPTS,
-                 ssh_username=DEFAULT_USERNAME,
-                 ssh_password=DEFAULT_PASSWORD,
-                 ssh_private_key=None):
+                 ssh_max_attempts=DEFAULT_MAX_ATTEMPTS):
 
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -53,9 +50,8 @@ class NetworkExplorer(object):
         self.ssh_timeout = ssh_timeout
         self.ssh_max_bytes = ssh_max_bytes
         self.ssh_max_attempts = ssh_max_attempts
-        self.ssh_username = ssh_username
-        self.ssh_password = ssh_password
-        self.ssh_private_key = ssh_private_key
+
+        self._auth_manager = AuthManager(parser)
 
     def explore_lldp(self, explored_devices, queue):
         """
@@ -124,7 +120,7 @@ class NetworkExplorer(object):
 
     def _build_lldp_neighbors(self, device):
         """
-        Obtain the list of all ldp neighbors
+        Obtain the list of all lldp neighbors
         """
         neighbors_result = self._get_lldp_neighbors()
         device.interfaces = self.network_parser\
@@ -215,21 +211,14 @@ class NetworkExplorer(object):
         """
         self.attempts_count += 1
 
-        username = self.ssh_username
-        password = self.ssh_password
-        pkey = None
-
-        if self.device.is_linux_server():
-            username = DEFAULT_USERNAME
-            password = DEFAULT_PASSWORD
-            pkey = self.ssh_private_key
-
+        kwargs = self._auth_manager.get_params(self.hostname, self.device.type)
+        if kwargs is None:
+            # TODO: arreter le process proprement
+            raise ValueError("No auth method")
         self.ssh.connect(hostname=self.hostname,
-                         username=username,
-                         password=password,
-                         pkey=pkey,
                          look_for_keys=False,
-                         timeout=self.ssh_timeout)
+                         timeout=self.ssh_timeout,
+                         **kwargs)
         self.shell = self.ssh.invoke_shell()
         self.shell.set_combine_stderr(True)
 

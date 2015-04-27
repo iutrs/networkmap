@@ -33,34 +33,6 @@ def _parse_args():
     return parser.parse_args()
 
 
-def _parse_config(config_file):
-
-    if not os.path.isfile(config_file):
-        logging.error("Could not find configuration file '%s'.", config_file)
-        exit()
-
-    config = ConfigParser.RawConfigParser()
-    config.read(config_file)
-
-    conf = Configuration()
-
-    conf.protocol = config.get('DEFAULT', 'Protocol')
-    conf.source_address = config.get('DEFAULT', 'SourceAddress')
-    conf.outputfile = config.get('DEFAULT', 'OutputFile')
-    conf.logfile = config.get('DEFAULT', 'LogFile')
-    conf.ignore_list = config.get('DEFAULT', 'Ignore').split()
-
-    conf.ssh_timeout = config.getfloat('SSH', 'Timeout')
-    conf.ssh_max_bytes = config.getint('SSH', 'MaximumBytesToReceive')
-    conf.ssh_max_attempts = config.getint('SSH', 'MaximumAttempts')
-    conf.ssh_username = config.get('SSH', 'Username')
-    conf.ssh_password = config.get('SSH', 'Password')
-    conf.ssh_private_key = paramiko.RSAKey.from_private_key_file(
-        config.get('SSH', 'PathToPrivateKey'))
-
-    return conf
-
-
 def _initialize_logger(logfile):
     logging.getLogger().setLevel(logging.DEBUG)
     logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -91,7 +63,26 @@ def _write_results_to_file(results, outputfile):
 
 def main():
     args = _parse_args()
-    conf = _parse_config(args.config)
+
+    config_file = args.config
+    if not os.path.isfile(config_file):
+        logging.error("Could not find configuration file '%s'.", config_file)
+        exit()
+
+    parser = ConfigParser.RawConfigParser()
+    parser.read(config_file)
+
+    conf = Configuration()
+
+    conf.protocol = parser.get('Networkmap', 'Protocol')
+    conf.source_address = parser.get('Networkmap', 'SourceAddress')
+    conf.outputfile = parser.get('Networkmap', 'OutputFile')
+    conf.logfile = parser.get('Networkmap', 'LogFile')
+    conf.ignore_list = parser.get('Networkmap', 'Ignore').split()
+
+    conf.ssh_timeout = parser.getfloat('SSH', 'Timeout')
+    conf.ssh_max_bytes = parser.getint('SSH', 'MaximumBytesToReceive')
+    conf.ssh_max_attempts = parser.getint('SSH', 'MaximumAttempts')
 
     _initialize_logger(conf.logfile)
 
@@ -114,13 +105,11 @@ def main():
             nextDevice = queue.get()
 
             explorer = NetworkExplorer(device=nextDevice,
+                                       parser=parser,
                                        ignore_list=conf.ignore_list,
                                        ssh_timeout=conf.ssh_timeout,
                                        ssh_max_bytes=conf.ssh_max_bytes,
-                                       ssh_max_attempts=conf.ssh_max_attempts,
-                                       ssh_username=conf.ssh_username,
-                                       ssh_password=conf.ssh_password,
-                                       ssh_private_key=conf.ssh_private_key)
+                                       ssh_max_attempts=conf.ssh_max_attempts)
 
             p = Process(
                 target=explorer.explore_lldp,

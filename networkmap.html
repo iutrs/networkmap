@@ -9,6 +9,7 @@
     <script type="text/javascript" src="./js/networkmap.js"></script>
     <script type="text/javascript" src="./js/typeahead.bundle.min.js"></script>
     <!-- Bootstrap sb-admin-2 theme (js)-->
+    <script type="text/javascript" src="./js/sb-admin-2/bootstrap.min.js"></script>
     <script type="text/javascript" src="./js/sb-admin-2/sb-admin-2.js"></script>
     <script type="text/javascript" src="./js/sb-admin-2/metisMenu.js"></script>
 
@@ -16,9 +17,9 @@
     <link type="text/css" href="./css/vis.css" rel="stylesheet"/>
     <link type="text/css" href="./css/networkmap.css" rel="stylesheet"/>
     <link type="text/css" href="./css/typeahead.css" rel="stylesheet"/>
-    <link type="text/css" href="./css/bootstrap.min.css" rel="stylesheet"/>
-    <link type="text/css" href="./css/font-awesome.min.css" rel="stylesheet"/>
     <!-- Bootstrap sb-admin-2 theme (css)-->
+    <link type="text/css" href="./css/sb-admin-2/bootstrap.min.css" rel="stylesheet"/>
+    <link type="text/css" href="./css/sb-admin-2/font-awesome.min.css" rel="stylesheet"/>
     <link type="text/css" href="./css/sb-admin-2/sb-admin-2.css" rel="stylesheet"/>
     <link type="text/css" href="./css/sb-admin-2/metisMenu.css" rel="stylesheet"/>
 </head>
@@ -31,9 +32,11 @@
         <div class="col-lg-9 col-md-12 col-sm-12">
             <div class="panel panel-default">
                 <div class="panel-heading">
-                    Network
+                    <h4 class="panel-title">
+                        <a href="#networkmap" data-toggle="collapse">Network</a>
+                    </h4>
                 </div>
-                <div class="panel-body" id="networkmap">
+                <div id="networkmap" class="panel-body panel-collapse collapse in">
                     <!-- The network is drawn here -->
                 </div>
             </div>
@@ -43,21 +46,25 @@
         <div class="col-lg-3 col-md-6 col-sm-6">
             <div class="panel panel-default">
                 <div class="panel-heading">
-                    Options
+                    <h4 class="panel-title">
+                        <a href="#options" data-toggle="collapse">Options</a>
+                    </h4>
                 </div>
-                <div class="panel-body" id="options">
+                <div id="options" class="panel-body panel-collapse collapse in">
 
                     <!-- Search options -->
                     <div class="panel panel-default">
                         <div class="panel-heading">
-                            Search
+                            <h4 class="panel-title">
+                                <a href="#search" data-toggle="collapse">Search</a>
+                            </h4>
                         </div>
-                        <div class="panel-body" id="search">
-                            <input class="form-control typeahead" id="deviceSearch" type="text" \
+                        <div id="search" class="panel-body panel-collapse collapse in">
+                            <input id="deviceSearch" class="form-control typeahead" type="text" \
                                 placeholder="Find a device" onchange="selectNode(undefined, false)">
                             </input>
                             <div>
-                                <button class="btn btn-default" id="btnFocus" onclick="toggleFocusOnNode()">
+                                <button id="btnFocus" class="btn btn-default" onclick="toggleFocusOnNode()">
                                     Focus
                                 </button>
                             </div>
@@ -68,14 +75,16 @@
                     <!-- General options -->
                     <div class="panel panel-default">
                         <div class="panel-heading">
-                            General
+                            <h4 class="panel-title">
+                                <a href="#general" data-toggle="collapse">General</a>
+                            </h4>
                         </div>
-                        <div class="panel-body" id="general">
+                        <div id="general" class="panel-body panel-collapse collapse in">
 
                             <div class="form-group">
                                 <div class="checkbox">
                                     <label>
-                                        <input type="checkbox" id="chkShowvms" \
+                                        <input id="chkShowvms" type="checkbox" \
                                             onchange="showVmsNodes();">
                                                 Show virtual machines
                                         </input>
@@ -83,7 +92,7 @@
                                 </div>
                                 <div class="checkbox">
                                     <label>
-                                        <input type="checkbox" id="chkFreezeSimulation" \
+                                        <input  id="chkFreezeSimulation" type="checkbox" \
                                             onchange="freezeNetworkSimulation();">
                                                 Freeze simulation
                                         </input>
@@ -92,11 +101,11 @@
                             </div>
 
                             <div class="form-group">
-                                <button type="button" class="btn btn-default" id="btnStorePositions" \
+                                <button id="btnStorePositions" type="button" class="btn btn-default" \
                                     onclick="storePositions();">
                                         Store positions
                                 </button>
-                                <button type="button" class="btn btn-default" id="btnClearPositions" \
+                                <button id="btnClearPositions" type="button" class="btn btn-default" \
                                     onclick='clearPositions();'>
                                         Clear positions
                                 </button>
@@ -108,9 +117,11 @@
                     <!-- Vlans options -->
                     <div class="panel panel-default">
                         <div class="panel-heading">
-                            Vlans
+                            <h4 class="panel-title">
+                                <a href="#vlans" data-toggle="collapse">Vlans</a>
+                            </h4>
                         </div>
-                        <div class="panel-body" id="vlans">
+                        <div id="vlans" class="panel-body panel-collapse collapse in">
 
                             <div id="vlanSelect" class="form-group form-inline">
                                 <label>Vlan:</label>
@@ -122,14 +133,14 @@
                                 <!-- The vlan info is generated by the javascript. -->
                             </div>
 
-                            <div class="form-group form-inline">
+                            <div id="vlanDiffusion" class="form-group form-inline">
                                 <label>Diffusion:</label>
                                 <input id="vlanDiffusionColorPicker" type="color" \
                                     onchange="updateColor(this.value, 'vlanDiffusionColor')">
                                 </input>
                             </div>
 
-                            <div class="form-group form-inline">
+                            <div id="vlanIncoherences" class="form-group form-inline">
                                 <label>Incoherences:</label>
                                 <input id="vlanIncoherenceColorPicker" type="color" \
                                     onchange="updateColor(this.value, 'vlanIncoherenceColor')">
@@ -148,9 +159,11 @@
         <div class="col-lg-3 col-md-6 col-sm-6">
             <div class="panel panel-default">
                 <div class="panel-heading">
-                    Details
+                    <h4 class="panel-title">
+                        <a href="#details" data-toggle="collapse">Details</a>
+                    </h4>
                 </div>
-                <div class="panel-body" id="details">
+                <div id="details" class="panel-body panel-collapse collapse in">
                     <div id="selectionInfo"><b>No selection</b></div>
                 </div>
             </div>

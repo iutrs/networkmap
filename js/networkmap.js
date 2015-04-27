@@ -132,7 +132,7 @@ function createNodes() {
             img = SWITCH_UNREACHABLE_IMG;
             title = SWITCH_UNREACHABLE_TITLE;
         }
-        else if (device.system_description && device.system_description.contains("Linux")) {
+        else if (device.system_description && device.system_description.indexOf("Linux") > -1) {
             color = serverDefaultColor;
             img = SERVER_IMG;
             title = SERVER_TITLE;
@@ -389,7 +389,6 @@ function setGeneralOptionsAttributes() {
     this.showvms ? $("#chkShowvms").attr("checked", "checked") : $("#chkShowvms").removeAttr("checked");
 
     this.freezeSimulation ? $("#chkFreezeSimulation").attr("checked", "checked") : $("#chkFreezeSimulation").removeAttr("checked");
-
 }
 
 
@@ -491,9 +490,7 @@ function onNodeSelect(nodeId) {
 function onEdgeSelect(edge) {
     var edge = getEdge(edge);
 
-    var content = buildEdgeDescription(edge);
-
-    document.getElementById('selectionInfo').innerHTML = content;
+    document.getElementById('selectionInfo').innerHTML = buildEdgeDescription(edge);
 }
 
 /**
@@ -573,20 +570,25 @@ function buildVirtualMachinesList(device) {
  * Buils edge description
  */
 function buildEdgeDescription(edge) {
+    var content = "";
 
     var deviceFrom = getDevice(edge.from);
     var deviceTo = getDevice(edge.to);
 
-    var content = "";
-
-    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
-    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
-
-    var contentFrom = (interfacesFrom.length > 0) ? "" : "No interface was found.";
-    var contentTo = (interfacesTo.length > 0) ? "" : "No interface was found.";
+    var incoherences = [];
 
     // We need tuples to compare vlans on same link
-    var tuples = getInterfaceTuples(interfacesFrom, interfacesTo);
+    var tuples = getInterfaceTuples(deviceFrom, deviceTo, incoherences);
+
+    if (incoherences.length > 0) {
+        var content = "";
+
+        for (var i = 0; i < incoherences.length; i++) {
+            content += "<p class='text-danger'>" + incoherences[i] + "</p>";
+        }
+
+        return content;
+    }
 
     for (var i = 0; i < tuples.length; i++) {
         var contentFrom = "<b>" + deviceFrom.system_name + "</b></br>";
@@ -634,7 +636,25 @@ function buildEdgeDescription(edge) {
 /**
  * Join corresponding interfaces of two connected devices as tuples.
  */
-function getInterfaceTuples(interfacesFrom, interfacesTo) {
+function getInterfaceTuples(deviceFrom, deviceTo, incoherences) {
+    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+
+    if (interfacesFrom.length <= 0) {
+        if (interfacesTo.length <= 0) {
+            var incoherence = "Cannot find any valid link between these 2 devices.";
+            incoherences.push(incoherence);
+        }
+        else {
+            var incoherence = deviceFrom.system_name + " does not recognize " + deviceTo.system_name;
+            incoherences.push(incoherence);
+        }
+    }
+    else if (interfacesTo.length <= 0) {
+        var incoherence = deviceTo.system_name + " does not recognize " + deviceFrom.system_name;
+        incoherences.push(incoherence);
+    }
+
     var tuples = [];
     for (var i = 0; i < interfacesFrom.length; i++) {
         var intFrom = interfacesFrom[i];
@@ -643,7 +663,10 @@ function getInterfaceTuples(interfacesFrom, interfacesTo) {
             var intTo = interfacesTo[j];
 
             // Remote port and local port on both ends must correspond
-            if (intFrom.remote_port == intTo.local_port && intFrom.local_port == intTo.remote_port) {
+            var fromRecognizesTo = comparePortNames(intFrom.remote_port, intTo.local_port);
+            var toRecognizesFrom = comparePortNames(intTo.remote_port, intFrom.local_port);
+
+            if (fromRecognizesTo && toRecognizesFrom) {
                 tuples.push([intFrom, intTo])
             }
         }
@@ -676,7 +699,7 @@ function vlansInfo(vlan, ref, color) {
     tooltip += "Mode: " + vlan.mode + "\n";
     tooltip += "Status: " + vlan.status;
 
-    var info = "<a data-original-title='' data-container='body' data-toggle='popover' data-placement='top'";
+    var info = "<a data-container='body' data-toggle='popover' data-placement='top'";
     info += " data-content='" + tooltip + "' title='" + tooltip + "' >";
     info += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
 
@@ -995,4 +1018,24 @@ function naturalCompare(a, b) {
     }
 
     return ax.length - bx.length;
+}
+
+/**
+ * Compares two ports names (strings) and returns 'true' if they are considered equal.
+ * This function is needed because some devices trunkate the port names of their neighbours
+ * with ".." and a simple comparison would fail.
+ * (Ex.: comparing "ge-1/0.." to "ge-1/0/46.0" would return 'true')
+ */
+function comparePortNames(a, b) {
+    if (a == b) {
+        return true;
+    }
+
+    if (a.indexOf("..") > 0 && b.indexOf(a.substring(0, a.indexOf(".."))) > -1) {
+        return true;
+    }
+
+    if (b.indexOf("..") > 0 && a.indexOf(b.substring(0, b.indexOf(".."))) > -1) {
+        return true;
+    }
 }

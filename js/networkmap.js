@@ -19,15 +19,15 @@ var edges = [];
 // Arrays used to keep information in memory
 var myVlans = {};
 
-// Objects colors (for further customization)
+// Links colors
 var linkDefaultColor = undefined;
 var vlanDiffusionColor = get("vlanDiffusionColor") || "#00D000";
 var vlanIncoherenceColor = get("vlanIncoherenceColor") || "#FF0000";
 
-var nodeDefaultColor = "#2B7CE9";
-var unaccessibleSwitchColor = "#C5000B";
-var serverDefaultColor = "#00FFBF";
-var vmDefaultColor = "#FF9900";
+//var nodeDefaultColor = "#2B7CE9";
+//var unaccessibleSwitchColor = "#C5000B";
+//var serverDefaultColor = "#00FFBF";
+//var vmDefaultColor = "#FF9900";
 
 // Images path
 const ICONS_DIR = "./css/img/hardware/";
@@ -123,18 +123,15 @@ function createNodes() {
     for (var i = 0; i < devices.length; i++) {
         var device = devices[i];
 
-        var color = nodeDefaultColor;
         var img = SWITCH_IMG;
         var title = SWITCH_TITLE;
 
         var interfacesLength = Object.keys(device.interfaces).length
         if (interfacesLength == 0) {
-            color = unaccessibleSwitchColor;
             img = SWITCH_UNREACHABLE_IMG;
             title = SWITCH_UNREACHABLE_TITLE;
         }
         else if (device.system_description && device.system_description.indexOf("Linux") > -1) {
-            color = serverDefaultColor;
             img = SERVER_IMG;
             title = SERVER_TITLE;
         }
@@ -153,7 +150,7 @@ function createNodes() {
             'id': device.mac_address,
             'label': device.system_name + "\n" + device.ip_address,
             'shape': 'image',
-            'color': color,
+            'color': undefined,
             'image': img,
             'title': title,
             'value': interfacesLength + 1,
@@ -182,7 +179,7 @@ function createVmsNodes(device) {
             'id': device.mac_address + "/" + vm.name,
             'label': vm.name,
             'shape': "square",
-            'color': vmDefaultColor,
+            'color': undefined,
             'title': undefined,
             'value': 1,
             'mass': 1
@@ -193,7 +190,7 @@ function createVmsNodes(device) {
             'from': device.mac_address,
             'to': device.mac_address + "/" + vm.name,
             'style': "line",
-            'color': linkDefaultColor,
+            'color': undefined,
             'width': 2,
         });
     }
@@ -223,7 +220,7 @@ function createEdges() {
                         'from': link[0],
                         'to': link[1],
                         'style': "line",
-                        'color': linkDefaultColor,
+                        'color': undefined,
                         'width': 2,
                         'labelFrom': labelFrom,
                         'labelTo': labelTo
@@ -317,46 +314,377 @@ function getStringifiedInterface(interfaces) {
 }
 
 /**
- * Select the node associated the specified system name.
- * If no argument is given (or undefined), it will try to select the node
- * with the system name entered in the search box.
+ * Builds node description
  */
+function buildNodeDescription(device) {
+    var ip = "?";
+    var ip_type = "IP";
 
-function toggleFocusOnNode() {
-    if (focusedOnNode) {
-        network.zoomExtent({duration:0});
+    if (device.ip_address) {
+        ip = device.ip_address;
     }
-    else {
-        selectNode(undefined, zoom=true);
+    if (device.ip_address_type) {
+        ip_type = device.ip_address_type.toUpperCase();
     }
 
-    focusedOnNode = !focusedOnNode;
+    return (
+        "<b>Name:</b> " + device.system_name + "</br>" +
+        "<b>Description:</b> " + device.system_description + "</br>" +
+        "<b>" + ip_type + ":</b> " + ip + "</br>" +
+        "<b>MAC:</b> " + device.mac_address + "</br>" +
+        "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
+        buildConnectedPortsList(device) +
+        buildVirtualMachinesList(device)
+    )
 }
 
 /**
- * Select the node associated the specified system name.
- * If no argument is given (or undefined), it will try to select the node
- * with the system name entered in the search box.
+ * Builds device's connected ports list
  */
-function selectNode(sysName, zoom) {
-    if (sysName == undefined) {
-        sysName = $("#deviceSearch").val();
-    }
+function buildConnectedPortsList(device) {
 
-    if (sysName == "") {
-        return;
-    }
+    var connectedPorts = "<b>Connected interfaces:</b></br>";
+    var otherCount = 0;
 
-    for (var i = 0; i < devices.length; i++) {
-        var device = devices[i];
-        if (device.system_name == sysName) {
-            onNodeSelect([device.mac_address]);
-            if (zoom) {
-                network.focusOnNode(device.mac_address, {scale:1});
-            }
-            break;
+    var interfaces = Object.keys(device.interfaces).map(function(key){return device.interfaces[key];});
+    interfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
+
+    for (var i = 0; i < interfaces.length; i++) {
+        var int = interfaces[i];
+        if (int.remote_system_name == "") {
+            otherCount++;
+        }
+        else {
+            var line = int.local_port + " --> ";
+            line += int.remote_port + " (";
+            line += int.remote_system_name + ")</br>";
+            connectedPorts += line;
         }
     }
+
+    if (otherCount > 0) {
+        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>";
+    }
+
+    return Object.keys(device.interfaces).length > 0 ? connectedPorts : "";
+}
+
+/**
+ * Builds device's virtual machines list
+ */
+function buildVirtualMachinesList(device) {
+
+    var output = "<b>Virtual machines:</b></br>";
+
+    for (var i = 0; i < device.virtual_machines.length; i++) {
+        var vm = device.virtual_machines[i];
+
+        var line = vm.identifier + " | <b>" + vm.name + "</b> (" + vm.state + ")";
+        output += line + "</br>";
+    }
+
+    return device.virtual_machines.length > 0 ? output : "";
+}
+
+/**
+ * Buils edge description
+ */
+function buildEdgeDescription(edge) {
+    var html = "";
+
+    var deviceFrom = getDevice(edge.from);
+    var deviceTo = getDevice(edge.to);
+
+    var incoherences = checkForIncoherencesBetween(deviceFrom, deviceTo);
+
+    // We need tuples to compare vlans on same link
+    var tuples = getInterfaceTuples(deviceFrom, deviceTo);
+
+    if (incoherences.length > 0) {
+        for (var i = 0; i < incoherences.length; i++) {
+            html += "<p class='text-danger'>" + incoherences[i] + "</p>";
+        }
+    }
+
+    var html = "<div class='table-responsive'><table class='table table-hover'>";
+    html += "<thead><tr><th class='col-md-6'>" + deviceFrom.system_name + "</th>";
+    html += "<th class='col-md-6'>" + deviceTo.system_name + "</th></tr></thead><tbody>";
+
+    for (var i = 0; i < tuples.length; i++) {
+        var intFrom = tuples[i][0];
+        var intTo = tuples[i][1];
+
+        var strings = stringifyInterfaceTuple(intFrom, intTo);
+
+        var stringFrom = strings[0];
+        var stringTo = strings[1];
+
+        html += "<tr><td class='col-md-6'>" + stringFrom + "</td>";
+        html += "<td class='col-md-6'>" + stringTo + "</td></tr>";
+    }
+
+    if (tuples.length <= 0) {
+        // Showing vlans information of interfaces even if no tuples found
+        var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+        var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+
+        var mostInterfaces = (interfacesFrom.length >= interfacesTo.length) ? interfacesFrom : interfacesTo;
+
+        for (var i = 0; i < mostInterfaces.length; i++) {
+            var intFrom = mostInterfaces[i];
+            var intTo = undefined;
+
+            var strings = stringifyInterfaceTuple(intFrom, intTo);
+
+            var stringFrom = strings[0];
+            var stringTo = strings[1];
+
+            html += "<tr><td class='col-md-6'>" + stringFrom + "</td>";
+            html += "<td class='col-md-6'>" + stringTo + "</td></tr>";
+        }
+    }
+
+    html += "</tbody></table></div>";
+
+    return html;
+}
+
+/**
+ * Check for incoherences between two connected devices
+ */
+function checkForIncoherencesBetween(deviceFrom, deviceTo) {
+    var incoherences = [];
+
+    var deviceFromUnaccessible = Object.keys(deviceFrom.interfaces).length <= 0;
+    var deviceToUnaccessible = Object.keys(deviceTo.interfaces).length <= 0;
+
+    if (deviceFromUnaccessible) {
+        var incoherence = deviceFrom.system_name + " is unaccessible.";
+        incoherences.push(incoherence);
+    }
+
+    if (deviceToUnaccessible) {
+        var incoherence = deviceTo.system_name + " is unaccessible.";
+        incoherences.push(incoherence);
+    }
+
+    if (deviceFromUnaccessible || deviceToUnaccessible) {
+        return incoherences;
+    }
+
+    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+
+    if (interfacesFrom.length <= 0) {
+        if (interfacesTo.length <= 0) {
+            var incoherence = "Cannot find any valid link between these 2 devices.";
+            incoherences.push(incoherence);
+        }
+        else {
+            var incoherence = deviceFrom.system_name + " does not recognize " + deviceTo.system_name;
+            incoherences.push(incoherence);
+        }
+    }
+    else if (interfacesTo.length <= 0) {
+        var incoherence = deviceTo.system_name + " does not recognize " + deviceFrom.system_name;
+        incoherences.push(incoherence);
+    }
+
+    return incoherences;
+}
+
+/**
+ * Join corresponding interfaces of two connected devices as tuples.
+ */
+function getInterfaceTuples(deviceFrom, deviceTo) {
+    var tuples = [];
+
+    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
+    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
+
+    for (var i = 0; i < interfacesFrom.length; i++) {
+        var intFrom = interfacesFrom[i];
+
+        for (var j = 0; j < interfacesTo.length; j++) {
+            var intTo = interfacesTo[j];
+
+            // Remote port and local port on both ends must correspond
+            var fromRecognizesTo = comparePortNames(intFrom.remote_port, intTo.local_port);
+            var toRecognizesFrom = comparePortNames(intTo.remote_port, intFrom.local_port);
+
+            if (fromRecognizesTo && toRecognizesFrom) {
+                tuples.push([intFrom, intTo])
+            }
+        }
+    }
+    return tuples;
+}
+
+/**
+ * Returns the stringified version of both interfaces as if they were connecteds.
+ * We need two interfaces in order to find the vlan incoherences.
+ */
+function stringifyInterfaceTuple(intFrom, intTo) {
+    // Interface from
+    var vlansOnInterface = getVlansOnInterface(intFrom);
+    var vlansIdsFrom = vlansOnInterface[0];
+    var vlansFrom = vlansOnInterface[1];
+
+    // Interface to
+    vlansOnInterface = getVlansOnInterface(intTo);
+    var vlansIdsTo = vlansOnInterface[0];
+    var vlansTo = vlansOnInterface[1];
+
+    // Vlan differences
+    var vlanDifferences = vlansIdsTo.diff(vlansIdsFrom)
+
+    var stringFrom = intFrom ? "Vlans on <b>" + intFrom.local_port + "</b>&nbsp:</br>" : "-";
+
+    if (vlansFrom.length > 0) {
+        stringFrom += vlansToString(vlansFrom, intFrom.mac_address, vlanDifferences);
+    }
+    else if (intFrom) {
+        stringFrom += "<b>No vlans</b>";
+    }
+
+    var stringTo = intTo ? "Vlans on <b>" + intTo.local_port + "</b>&nbsp:</br>" : "-";
+
+    if (vlansTo.length > 0) {
+        stringTo += vlansToString(vlansTo, intTo.mac_address, vlanDifferences);
+    }
+    else if (intTo) {
+        stringTo += "<b>No vlans</b>";
+    }
+
+    return [stringFrom, stringTo];
+}
+
+/**
+ * Stringify a list of vlans with their identifiers only
+ */
+function vlansToString(vlans, str, differences) {
+    var string = "";
+    for (var i = 0; i < vlans.length; i++) {
+        var vlan = vlans[i];
+
+        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black";
+
+        var ref = str + "/vlan" + vlan.identifier;
+        string += vlansInfo(vlan, ref, color);
+        string += (i < vlans.length -1) ? ", " : "";
+    }
+    return string;
+}
+
+/**
+ * Generate vlan info (tooltip when hovering)
+ */
+function vlansInfo(vlan, ref, color) {
+    var tooltip = "Name: " + vlan.name + "\n";
+    tooltip += "Mode: " + vlan.mode + "\n";
+    tooltip += "Status: " + vlan.status;
+
+    var info = "<a data-container='body' data-toggle='popover' data-placement='top'";
+    info += " data-content='" + tooltip + "' title='" + tooltip + "' >";
+    info += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
+
+    return info;
+}
+
+/**
+ * Generates a dropdown list containing all the vlans identifier
+ */
+function createVlansList() {
+    $("#vlansDropDown").append("<option value='noVlanSelection'></option>");
+
+    for (var i in myVlans) {
+        var option = "<option value='" + myVlans[i].identifier + "'>";
+        option += myVlans[i].identifier + "</option>";
+
+        $("#vlansDropDown").append(option);
+    }
+
+    $("#vlansDropDown").val(selectedVlanId);
+
+    displayVlanInfo();
+}
+
+/**
+ * Display the information of the selected vlan
+ */
+function displayVlanInfo() {
+
+    selectedVlanId = $('#vlansDropDown>option:selected').text();
+
+    store("selectedVlanId", selectedVlanId, false);
+
+    var vlanInfo = "<label>No vlan selected.</label>";
+
+    var vlan = myVlans[selectedVlanId];
+
+    if (vlan != undefined) {
+        vlanInfo = "<label>Name:</label>&nbsp" + vlan.name;
+    }
+
+    $("#vlanInfo").html(vlanInfo);
+
+    highlightVlanDiffusion(selectedVlanId);
+}
+
+/**
+ * Highlights the diffusion of the selected vlan
+ */
+function highlightVlanDiffusion(id) {
+
+    $("#vlanDiffusionColorPicker").val(vlanDiffusionColor);
+    $("#vlanIncoherenceColorPicker").val(vlanIncoherenceColor);
+
+    for (var i = 0; i < edges.length; i++) {
+        var edge = edges[i];
+
+        var macAdressFrom = edge.from;
+        var macAdressTo = edge.to;
+
+        var deviceFrom = getDevice(macAdressFrom);
+        var deviceTo = getDevice(macAdressTo);
+
+        var interfaceFrom = getInterfaceConnectedTo(deviceFrom, macAdressTo);
+        var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
+
+        if (interfaceFrom != null && interfaceTo != null) {
+            var vlansFrom = Object.keys(interfaceFrom.vlans);
+            var vlansTo = Object.keys(interfaceTo.vlans);
+
+            var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
+            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
+
+            if (coherent) {
+                edge.width = 8;
+                edge.color = vlanDiffusionColor;
+            }
+            else if (notApplicable) {
+                edge.width = 2;
+                edge.color = linkDefaultColor;
+            }
+            else {
+                edge.width = 8;
+                edge.color = vlanIncoherenceColor;
+            }
+        }
+    }
+
+    resetData();
+}
+
+/**
+ * Updates the color preference
+ */
+function updateColor(color, variable) {
+    window[variable] = color;
+
+    store(variable, color, false);
+
+    highlightVlanDiffusion(selectedVlanId);
 }
 
 /**
@@ -494,313 +822,47 @@ function onEdgeSelect(edge) {
     $("#selectionInfo").html(content);
 }
 
+
 /**
- * Builds node description
+ * Select the node associated the specified system name.
+ * If no argument is given (or undefined), it will try to select the node
+ * with the system name entered in the search box.
  */
-function buildNodeDescription(device) {
-    var ip = "?";
-    var ip_type = "IP";
-
-    if (device.ip_address) {
-        ip = device.ip_address;
+function toggleFocusOnNode() {
+    if (focusedOnNode) {
+        network.zoomExtent({duration:0});
     }
-    if (device.ip_address_type) {
-        ip_type = device.ip_address_type.toUpperCase();
+    else {
+        selectNode(undefined, zoom=true);
     }
 
-    return (
-        "<b>Name:</b> " + device.system_name + "</br>" +
-        "<b>Description:</b> " + device.system_description + "</br>" +
-        "<b>" + ip_type + ":</b> " + ip + "</br>" +
-        "<b>MAC:</b> " + device.mac_address + "</br>" +
-        "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
-        buildConnectedPortsList(device) +
-        buildVirtualMachinesList(device)
-    )
+    focusedOnNode = !focusedOnNode;
 }
 
 /**
- * Builds device's connected ports list
+ * Select the node associated the specified system name.
+ * If no argument is given (or undefined), it will try to select the node
+ * with the system name entered in the search box.
  */
-function buildConnectedPortsList(device) {
-
-    var connectedPorts = "<b>Connected interfaces:</b></br>";
-    var otherCount = 0;
-
-    var interfaces = Object.keys(device.interfaces).map(function(key){return device.interfaces[key];});
-    interfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
-
-    for (var i = 0; i < interfaces.length; i++) {
-        var int = interfaces[i];
-        if (int.remote_system_name == "") {
-            otherCount++;
-        }
-        else {
-            var line = int.local_port + " --> ";
-            line += int.remote_port + " (";
-            line += int.remote_system_name + ")</br>";
-            connectedPorts += line;
-        }
+function selectNode(sysName, zoom) {
+    if (sysName == undefined) {
+        sysName = $("#deviceSearch").val();
     }
 
-    if (otherCount > 0) {
-        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>";
+    if (sysName == "") {
+        return;
     }
 
-    return Object.keys(device.interfaces).length > 0 ? connectedPorts : "";
-}
-
-/**
- * Builds device's virtual machines list
- */
-function buildVirtualMachinesList(device) {
-
-    var output = "<b>Virtual machines:</b></br>";
-
-    for (var i = 0; i < device.virtual_machines.length; i++) {
-        var vm = device.virtual_machines[i];
-
-        var line = vm.identifier + " | <b>" + vm.name + "</b> (" + vm.state + ")";
-        output += line + "</br>";
-    }
-
-    return device.virtual_machines.length > 0 ? output : "";
-}
-
-/**
- * Buils edge description
- */
-function buildEdgeDescription(edge) {
-    var content = "";
-
-    var deviceFrom = getDevice(edge.from);
-    var deviceTo = getDevice(edge.to);
-
-    var incoherences = [];
-
-    // We need tuples to compare vlans on same link
-    var tuples = getInterfaceTuples(deviceFrom, deviceTo, incoherences);
-
-    if (incoherences.length > 0) {
-        var content = "";
-
-        for (var i = 0; i < incoherences.length; i++) {
-            content += "<p class='text-danger'>" + incoherences[i] + "</p>";
-        }
-
-        return content;
-    }
-
-    for (var i = 0; i < tuples.length; i++) {
-        var contentFrom = "<b>" + deviceFrom.system_name + "</b></br>";
-        var contentTo = "<b>" + deviceTo.system_name + "</b></br>";
-
-        // Interface from
-        var intFrom = tuples[i][0];
-
-        var vlansOnInterface = getVlansOnInterface(intFrom);
-        var vlansIdsFrom = vlansOnInterface[0];
-        var vlansFrom = vlansOnInterface[1];
-
-        // Interface to
-        var intTo = tuples[i][1];
-
-        vlansOnInterface = getVlansOnInterface(intTo);
-        var vlansIdsTo = vlansOnInterface[0];
-        var vlansTo = vlansOnInterface[1];
-
-        // Vlan differences
-        var vlanDifferences = vlansIdsTo.diff(vlansIdsFrom)
-
-        if (vlansFrom.length > 0) {
-            contentFrom += "Vlans on <b>" + intFrom.local_port + "</b>&nbsp:</br>";
-            contentFrom += vlansToString(vlansFrom, intFrom.mac_address, vlanDifferences);
-        }
-        else {
-            contentFrom += "No vlans on <b>" + intFrom.local_port + "</b>";
-        }
-
-        if (vlansTo.length > 0) {
-            contentTo += "Vlans on <b>" + intTo.local_port + "</b>&nbsp:</br>";
-            contentTo += vlansToString(vlansTo, intTo.mac_address, vlanDifferences);
-        }
-        else {
-            contentTo += "No vlans on <b>" + intTo.local_port + "</b>";
-        }
-
-        content += contentFrom + "</br>" + contentTo + "</br></br>";
-    }
-
-    return content;
-}
-
-/**
- * Join corresponding interfaces of two connected devices as tuples.
- */
-function getInterfaceTuples(deviceFrom, deviceTo, incoherences) {
-    var interfacesFrom = getInterfacesConnectedTo(deviceFrom, deviceTo);
-    var interfacesTo = getInterfacesConnectedTo(deviceTo, deviceFrom);
-
-    if (interfacesFrom.length <= 0) {
-        if (interfacesTo.length <= 0) {
-            var incoherence = "Cannot find any valid link between these 2 devices.";
-            incoherences.push(incoherence);
-        }
-        else {
-            var incoherence = deviceFrom.system_name + " does not recognize " + deviceTo.system_name;
-            incoherences.push(incoherence);
-        }
-    }
-    else if (interfacesTo.length <= 0) {
-        var incoherence = deviceTo.system_name + " does not recognize " + deviceFrom.system_name;
-        incoherences.push(incoherence);
-    }
-
-    var tuples = [];
-    for (var i = 0; i < interfacesFrom.length; i++) {
-        var intFrom = interfacesFrom[i];
-
-        for (var j = 0; j < interfacesTo.length; j++) {
-            var intTo = interfacesTo[j];
-
-            // Remote port and local port on both ends must correspond
-            var fromRecognizesTo = comparePortNames(intFrom.remote_port, intTo.local_port);
-            var toRecognizesFrom = comparePortNames(intTo.remote_port, intFrom.local_port);
-
-            if (fromRecognizesTo && toRecognizesFrom) {
-                tuples.push([intFrom, intTo])
+    for (var i = 0; i < devices.length; i++) {
+        var device = devices[i];
+        if (device.system_name == sysName) {
+            onNodeSelect([device.mac_address]);
+            if (zoom) {
+                network.focusOnNode(device.mac_address, {scale:1});
             }
+            break;
         }
     }
-    return tuples;
-}
-
-/**
- * Stringify a list of vlans with their identifiers only
- */
-function vlansToString(vlans, str, differences) {
-    var string = "";
-    for (var i = 0; i < vlans.length; i++) {
-        var vlan = vlans[i];
-
-        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black";
-
-        var ref = str + "/vlan" + vlan.identifier;
-        string += vlansInfo(vlan, ref, color);
-        string += (i < vlans.length -1) ? ", " : "";
-    }
-    return string;
-}
-
-/**
- * Generate vlan info (tooltip when hovering)
- */
-function vlansInfo(vlan, ref, color) {
-    var tooltip = "Name: " + vlan.name + "\n";
-    tooltip += "Mode: " + vlan.mode + "\n";
-    tooltip += "Status: " + vlan.status;
-
-    var info = "<a data-container='body' data-toggle='popover' data-placement='top'";
-    info += " data-content='" + tooltip + "' title='" + tooltip + "' >";
-    info += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
-
-    return info;
-}
-
-/**
- * Generates a dropdown list containing all the vlans identifier
- */
-function createVlansList() {
-    $("#vlansDropDown").append("<option value='noVlanSelection'></option>");
-
-    for (var i in myVlans) {
-        var option = "<option value='" + myVlans[i].identifier + "'>";
-        option += myVlans[i].identifier + "</option>";
-
-        $("#vlansDropDown").append(option);
-    }
-
-    $("#vlansDropDown").val(selectedVlanId);
-
-    displayVlanInfo();
-}
-
-/**
- * Display the information of the selected vlan
- */
-function displayVlanInfo() {
-
-    selectedVlanId = $('#vlansDropDown>option:selected').text();
-
-    store("selectedVlanId", selectedVlanId, false);
-
-    var vlanInfo = "<label>No vlan selected.</label>";
-
-    var vlan = myVlans[selectedVlanId];
-
-    if (vlan != undefined) {
-        vlanInfo = "<label>Name:</label>&nbsp" + vlan.name;
-    }
-
-    $("#vlanInfo").html(vlanInfo);
-
-    highlightVlanDiffusion(selectedVlanId);
-}
-
-/**
- * Updates the color preference
- */
-function updateColor(color, variable) {
-    window[variable] = color;
-
-    store(variable, color, false);
-
-    highlightVlanDiffusion(selectedVlanId);
-}
-
-/**
- * Highlights the diffusion of the selected vlan
- */
-function highlightVlanDiffusion(id) {
-
-    $("#vlanDiffusionColorPicker").val(vlanDiffusionColor);
-    $("#vlanIncoherenceColorPicker").val(vlanIncoherenceColor);
-
-    for (var i = 0; i < edges.length; i++) {
-        var edge = edges[i];
-
-        var macAdressFrom = edge.from;
-        var macAdressTo = edge.to;
-
-        var deviceFrom = getDevice(macAdressFrom);
-        var deviceTo = getDevice(macAdressTo);
-
-        var interfaceFrom = getInterfaceConnectedTo(deviceFrom, macAdressTo);
-        var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
-
-        if (interfaceFrom != null && interfaceTo != null) {
-            var vlansFrom = Object.keys(interfaceFrom.vlans);
-            var vlansTo = Object.keys(interfaceTo.vlans);
-
-            var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
-            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
-
-            if (coherent) {
-                edge.width = 8;
-                edge.color = vlanDiffusionColor;
-            }
-            else if (notApplicable) {
-                edge.width = 2;
-                edge.color = linkDefaultColor;
-            }
-            else {
-                edge.width = 8;
-                edge.color = vlanIncoherenceColor;
-            }
-        }
-    }
-
-    resetData();
 }
 
 /**
@@ -916,44 +978,20 @@ function edgeExists(link) {
 }
 
 /**
- * Store the value in the local storage
- */
-function store(key, content, json) {
-    localStorage[key] = json ? JSON.stringify(content) : content;
-};
-
-/**
- * Get the value from the local storage
- */
-function get(key, json) {
-    if (localStorage[key]) {
-        return json ? JSON.parse(localStorage[key]) : localStorage[key];
-    }
-};
-
-/**
- * Clears the value in the local storage
- */
-function clear(key) {
-    if (localStorage[key]) {
-        delete localStorage[key];
-    }
-};
-
-/**
  * Saves the position of all nodes in local storage.
  */
 function storePositions() {
     store("nodesPosition", network.getPositions(), true);
-    draw();
 }
 
 /**
  * Clears the nodes position in the local storage
  */
 function clearPositions() {
-    clear("nodesPosition");
-    draw();
+    if (getPositions()) {
+        clear("nodesPosition");
+        draw();
+    }
 }
 
 /**
@@ -982,6 +1020,31 @@ function resetData() {
     network.setData({nodes: nodes, edges: edges});
     network.freezeSimulation(this.freezeSimulation);
 }
+
+/**
+ * Store the value in the local storage
+ */
+function store(key, content, json) {
+    localStorage[key] = json ? JSON.stringify(content) : content;
+};
+
+/**
+ * Get the value from the local storage
+ */
+function get(key, json) {
+    if (localStorage[key]) {
+        return json ? JSON.parse(localStorage[key]) : localStorage[key];
+    }
+};
+
+/**
+ * Clears the value in the local storage
+ */
+function clear(key) {
+    if (localStorage[key]) {
+        delete localStorage[key];
+    }
+};
 
 /**
  * Returns the differences between two arrays

@@ -294,8 +294,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
     def _update_vlans_on_interfaces(self, port, trunk_id, interfaces):
         if trunk_id not in self.vlans_affected_to_trunks:
-            logging.warning("Incoherence warning: Trunk named '%s' doesn't \
-                            have any vlans.", trunk_id)
+            logging.warning("Warning: No vlan found for trunk %s", trunk_id)
             return
 
         if port in interfaces:

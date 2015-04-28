@@ -68,7 +68,7 @@ class NetworkExplorer(object):
         try:
             self._open_ssh_connection()
         except paramiko.AuthenticationException as pae:
-            logging.debug("Authentication failed with %s.", self.hostname)
+            logging.warning("Authentication failed with %s.", self.hostname)
             return
         except Exception as e:
             logging.warning("Error with %s. %s", self.hostname, e)
@@ -212,13 +212,18 @@ class NetworkExplorer(object):
         self.attempts_count += 1
 
         kwargs = self._auth_manager.get_params(self.hostname, self.device.type)
+
         if kwargs is None:
             # TODO: arreter le process proprement
             raise ValueError("No auth method")
-        self.ssh.connect(hostname=self.hostname,
-                         look_for_keys=False,
-                         timeout=self.ssh_timeout,
-                         **kwargs)
+
+        kwargs.update({
+            "hostname": self.hostname,
+            "look_for_keys": False,
+            "allow_agent": False,
+            "timeout": self.ssh_timeout})
+
+        self.ssh.connect(**kwargs)
         self.shell = self.ssh.invoke_shell()
         self.shell.set_combine_stderr(True)
 

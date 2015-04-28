@@ -20,7 +20,8 @@ class AuthManager(object):
     def _get_options(self, auth_section):
         options = dict(self._parser.items(auth_section))
         if set(options) == set(["username", "password"]) or \
-            set(options) == set(["key"]):
+            set(options) == set(["key", "username"]) or \
+            set(options) == set(["key", "username", "password"]):
 
             if "key" in options:
                 path = options.pop("key")
@@ -73,27 +74,28 @@ hostname_missingsection = hostname_missingsection
 mygroup* = mygroup
 
 [Auth.hostname_custom]
-Username = admin_hostname_custom
-Password = password_hostname_custom
+username = admin_hostname_custom
+password = password_hostname_custom
 
 [Auth.hostname_unknownopt]
-Username = admin_hostname_unknownopt
-Password = password_hostname_unknownopt
+username = admin_hostname_unknownopt
+password = password_hostname_unknownopt
 UnknownOption = foo
 
 [Auth.mygroup]
-Username = admin_mygroup
-Password = password_mygroup
+username = admin_mygroup
+password = password_mygroup
 
 [Auth.linux]
-Key = ~/key.linux
+key = /tmp/test-key
+username = root
 
 [Auth.hp]
-Username = admin_hp
-Password = password_hp
+username = admin_hp
+password = password_hp
 
 [Auth.juniper]
-Username = admin_juniper
+username = admin_juniper
 """
 
         example = StringIO.StringIO(example)
@@ -132,10 +134,15 @@ Username = admin_juniper
         self.assertEqual(params, expected)
 
     def test_by_type_and_key(self):
+        k = paramiko.RSAKey.generate(1024)
+        k.write_private_key_file("/tmp/test-key")
+        with open("/tmp/test-key.pub", "w") as pub:
+            pub.write(k.get_base64())
         params = self.auth_manager.get_params(
             "unknown", "linux")
         expected = {
-            "pkey": os.path.expanduser("~/key.linux")}
+            "pkey": paramiko.RSAKey.from_private_key_file("/tmp/test-key"),
+            "username": "root"}
         self.assertEqual(params, expected)
 
     def test_username_without_password(self):

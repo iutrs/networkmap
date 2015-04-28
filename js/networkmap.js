@@ -567,7 +567,14 @@ function vlansToString(vlans, str, differences) {
     for (var i = 0; i < vlans.length; i++) {
         var vlan = vlans[i];
 
-        var color = (differences.indexOf(vlan.identifier) >= 0) ? vlanIncoherenceColor : "black";
+        var color = "black";
+
+        if (differences.indexOf(vlan.identifier) >= 0) {
+            color = vlanIncoherenceColor;
+        }
+        else if (vlan.identifier == selectedVlanId) {
+            color = vlanDiffusionColor;
+        }
 
         var ref = str + "/vlan" + vlan.identifier;
         string += vlansInfo(vlan, ref, color);
@@ -585,9 +592,9 @@ function vlansInfo(vlan, ref, color) {
     tooltip += "Status: " + vlan.status;
 
     var info = "<a data-container='body' data-toggle='popover' data-placement='top'";
-    info += " data-content='" + tooltip + "' title='" + tooltip + "' >";
-    info += "<font color='" + color + "'>" + vlan.identifier + "</font></a>";
-
+    info += " data-content='" + tooltip + "' title='" + tooltip + "' ><font color='" + color + "'>";
+    info += (vlan.identifier == selectedVlanId) ? "<strong>" + vlan.identifier + "</strong>" : vlan.identifier;
+    info += "</font></a>";
     return info;
 }
 
@@ -642,33 +649,34 @@ function highlightVlanDiffusion(id) {
     for (var i = 0; i < edges.length; i++) {
         var edge = edges[i];
 
-        var macAdressFrom = edge.from;
-        var macAdressTo = edge.to;
+        var deviceFrom = getDevice(edge.from);
+        var deviceTo = getDevice(edge.to);
 
-        var deviceFrom = getDevice(macAdressFrom);
-        var deviceTo = getDevice(macAdressTo);
+        // We need tuples to compare vlans on same link
+        var tuples = getInterfaceTuples(deviceFrom, deviceTo);
 
-        var interfaceFrom = getInterfaceConnectedTo(deviceFrom, macAdressTo);
-        var interfaceTo = getInterfaceConnectedTo(deviceTo, macAdressFrom);
+        for (var j = 0; j < tuples.length; j++) {
+            var intFrom = tuples[j][0];
+            var intTo = tuples[j][1];
 
-        if (interfaceFrom != null && interfaceTo != null) {
-            var vlansFrom = Object.keys(interfaceFrom.vlans);
-            var vlansTo = Object.keys(interfaceTo.vlans);
+            var vlansFrom = Object.keys(intFrom.vlans);
+            var vlansTo = Object.keys(intTo.vlans);
 
             var coherent = vlansFrom.indexOf(id) != -1 && vlansTo.indexOf(id) != -1;
-            var notApplicable = vlansFrom.indexOf(id) == -1 && vlansTo.indexOf(id) == -1;
+            var applicable = vlansFrom.indexOf(id) != -1 || vlansTo.indexOf(id) != -1;
 
             if (coherent) {
                 edge.width = 8;
                 edge.color = vlanDiffusionColor;
             }
-            else if (notApplicable) {
-                edge.width = 2;
-                edge.color = linkDefaultColor;
-            }
-            else {
+            else if (applicable) {
                 edge.width = 8;
                 edge.color = vlanIncoherenceColor;
+                break; // Override other colors when there is at least one incoherence
+            }
+            else {
+                edge.width = 2;
+                edge.color = linkDefaultColor;
             }
         }
     }

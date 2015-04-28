@@ -21,6 +21,10 @@ DEFAULT_MAX_BYTES = 1024
 DEFAULT_MAX_ATTEMPTS = 1
 
 
+class NoAuthRequested(Exception):
+    pass
+
+
 class NetworkExplorer(object):
     """
     This class will communicate with its assigned device in order to get
@@ -30,7 +34,6 @@ class NetworkExplorer(object):
     def __init__(self,
                  device,
                  parser,
-                 ignore_list=None,
                  ssh_timeout=DEFAULT_TIMEOUT,
                  ssh_max_bytes=DEFAULT_MAX_BYTES,
                  ssh_max_attempts=DEFAULT_MAX_ATTEMPTS):
@@ -45,8 +48,6 @@ class NetworkExplorer(object):
         self.device = device
         self.hostname = device.system_name
 
-        self.ignore_list = ignore_list or []
-
         self.ssh_timeout = ssh_timeout
         self.ssh_max_bytes = ssh_max_bytes
         self.ssh_max_attempts = ssh_max_attempts
@@ -55,7 +56,7 @@ class NetworkExplorer(object):
 
     def explore_lldp(self, explored_devices, queue):
         """
-        Explores a device using the LLDP protocol in order to add its \
+        Explores a device using the LLDP protocol in order to add its
         valid neighbors in the queue.
 
         :param explored_devices: The dict of the devices already explored
@@ -67,11 +68,14 @@ class NetworkExplorer(object):
         # TODO Try new attempts when authentication fails
         try:
             self._open_ssh_connection()
+        except NoAuthRequested as e:
+            logging.info("No auth requested for %s", self.hostname)
+            return
         except paramiko.AuthenticationException as pae:
             logging.warning("Authentication failed with %s.", self.hostname)
             return
         except Exception as e:
-            logging.warning("Error with %s. %s", self.hostname, e)
+            logging.error("Error with %s: %s", self.hostname, e)
             return
 
         # Determining the type of the current device from the switch banner
@@ -79,8 +83,8 @@ class NetworkExplorer(object):
         self.network_parser = NetworkOutputParser.get_parser_type(banner)
 
         if self.network_parser is None:
-            logging.warning("Could not recognize device %s. Here is the \
-                switch prompt: %s", self.hostname, switch_prompt)
+            logging.warning("Unsupported device type for %s. Prompt was: %s",
+                self.hostname, switch_prompt)
             return
 
         # Preparing the switch, such as removing pagination
@@ -91,8 +95,8 @@ class NetworkExplorer(object):
             self.device = self._build_current_device()
 
         if self.device is None or self.device.mac_address is None:
-            logging.warning("Could not build device %s from its \
-                lldp local information.", self.hostname)
+            logging.warning("Could not build device %s from its"
+                "local lldp information.", self.hostname)
             return
 
         logging.info("Discovering lldp neighbors for %s...", self.hostname)
@@ -109,9 +113,7 @@ class NetworkExplorer(object):
 
             if valid and not explored:
                 explored_devices[neighbor.mac_address] = neighbor
-
-                if not self._ignore(neighbor):
-                    queue.put(neighbor)
+                queue.put(neighbor)
 
     def _build_current_device(self):
         info = self._get_lldp_local_device()
@@ -214,8 +216,7 @@ class NetworkExplorer(object):
         kwargs = self._auth_manager.get_params(self.hostname, self.device.type)
 
         if kwargs is None:
-            # TODO: arreter le process proprement
-            raise ValueError("No auth method")
+            raise NoAuthRequested("No auth method")
 
         kwargs.update({
             "hostname": self.hostname,
@@ -232,7 +233,7 @@ class NetworkExplorer(object):
 
     def _close_ssh_connection(self):
         """
-        Closes the connection with the current device. That connection must \
+        Closes the connection with the current device. That connection must
         have been opened beforehand.
         """
         try:
@@ -292,23 +293,6 @@ class NetworkExplorer(object):
             time.sleep(0.1)
             raw_output = self.shell.recv(self.ssh_max_bytes)
             return self._remove_ansi_escape_codes(raw_output.decode('utf8'))
-
-    def _ignore(self, device):
-        """
-        Verifies if the device is in the ignore list.
-
-        :param device: The device to verifiy
-        :type device: Device()
-        :return: Returns whether the device should be ignored or not
-        :rtype: bool
-        """
-        ip = device.ip_address
-        name = device.system_name
-
-        for ignore in self.ignore_list:
-            if ip and ip.lower().startswith(ignore.lower()) or \
-               name and name.lower().startswith(ignore.lower()):
-                return True
 
     def _remove_ansi_escape_codes(self, string):
         """

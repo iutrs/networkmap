@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
+import ConfigParser
 import fnmatch
 import os
-import ConfigParser
 
 import paramiko
 
@@ -14,23 +14,30 @@ class AuthManager(object):
     def __init__(self, parser):
         """
         parser: ConfigParser.RawConfigParser instance
+                which contains the [Auth] sections
         """
         self._parser = parser
 
     def _get_options(self, auth_section):
+        """
+        Given a specific section name, returns a kwargs dict
+        which can directly be used in the paramiko.SSHClient.connect
+        method
+        """
         options = dict(self._parser.items(auth_section))
-        if set(options) == set(["username", "password"]) or \
-            set(options) == set(["key", "username"]) or \
-            set(options) == set(["key", "username", "password"]):
+        if set(options) != set(["username", "password"]) and \
+            set(options) != set(["key", "username"]) and \
+            set(options) != set(["key", "username", "password"]):
 
-            if "key" in options:
-                path = options.pop("key")
-                path = os.path.expanduser(path)
-                pkey = paramiko.RSAKey.from_private_key_file(path)
-                options["pkey"] = pkey
-            return options
-        else:
             raise AuthConfigError("Invalid auth section %s" % auth_section)
+
+        if "key" in options:
+            path = options.pop("key")
+            path = os.path.expanduser(path)
+            pkey = paramiko.RSAKey.from_private_key_file(path)
+            options["pkey"] = pkey
+
+        return options
 
     def get_params(self, hostname, device_type):
         # Find by hostname
@@ -38,13 +45,13 @@ class AuthManager(object):
             if fnmatch.fnmatch(hostname, pattern):
                 if section_name == "":
                     return None
-                else:
-                    full_section_name = "Auth.%s" % section_name
-                    try:
-                        return self._get_options(full_section_name)
-                    except ConfigParser.NoSectionError:
-                        raise AuthConfigError(
-                            "Auth section %s does not exist" % section_name)
+
+                full_section_name = "Auth.%s" % section_name
+                try:
+                    return self._get_options(full_section_name)
+                except ConfigParser.NoSectionError:
+                    raise AuthConfigError(
+                        "Auth section %s does not exist" % section_name)
 
         # Find by device, or fallback to defaults if defined
         full_section_name = "Auth.%s" % device_type
@@ -144,6 +151,8 @@ username = admin_juniper
             "pkey": paramiko.RSAKey.from_private_key_file("/tmp/test-key"),
             "username": "root"}
         self.assertEqual(params, expected)
+        os.unlink("/tmp/test-key")
+        os.unlink("/tmp/test-key.pub")
 
     def test_username_without_password(self):
         with self.assertRaises(AuthConfigError):

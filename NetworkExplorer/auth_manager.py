@@ -42,6 +42,9 @@ class AuthManager(object):
     def get_params(self, hostname, device_type):
         # Find by hostname
         for pattern, section_name in self._parser.items("Auth"):
+            # Option names are lowercased by the parser
+            # fnmatch.fnmatch() is case-sensitive
+            hostname = hostname.lower()
             if fnmatch.fnmatch(hostname, pattern):
                 if section_name == "":
                     return None
@@ -75,7 +78,7 @@ class AuthManagerTester(unittest.TestCase):
         example = """
 [Auth]
 hostname_noauth =
-hostname_custom = hostname_custom
+HOSTNAME_CUSTOM = hostname_custom
 hostname_unknownopt = hostname_unknownopt
 hostname_missingsection = hostname_missingsection
 mygroup* = mygroup
@@ -118,7 +121,7 @@ username = admin_juniper
 
     def test_by_plain_name(self):
         params = self.auth_manager.get_params(
-            "hostname_custom", "hp")
+            "HOSTNAME_CUSTOM", "hp")
         expected = {
             "username": "admin_hostname_custom",
             "password": "password_hostname_custom"}

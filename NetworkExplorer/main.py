@@ -78,7 +78,6 @@ def main():
     conf.source_address = parser.get('Networkmap', 'SourceAddress')
     conf.outputfile = parser.get('Networkmap', 'OutputFile')
     conf.logfile = parser.get('Networkmap', 'LogFile')
-    conf.ignore_list = parser.get('Networkmap', 'Ignore').split()
 
     conf.ssh_timeout = parser.getfloat('SSH', 'Timeout')
     conf.ssh_max_bytes = parser.getint('SSH', 'MaximumBytesToReceive')
@@ -106,7 +105,6 @@ def main():
 
             explorer = NetworkExplorer(device=nextDevice,
                                        parser=parser,
-                                       ignore_list=conf.ignore_list,
                                        ssh_timeout=conf.ssh_timeout,
                                        ssh_max_bytes=conf.ssh_max_bytes,
                                        ssh_max_attempts=conf.ssh_max_attempts)

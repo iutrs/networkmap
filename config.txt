@@ -3,7 +3,6 @@ Protocol = LLDP
 SourceAddress = ?
 OutputFile = ?
 LogFile = ?
-Ignore =
 
 [SSH]
 Timeout = 10

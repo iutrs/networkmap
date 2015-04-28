@@ -1,4 +1,4 @@
-[DEFAULT]
+[Networkmap]
 Protocol = LLDP
 SourceAddress = ?
 OutputFile = ?
@@ -6,9 +6,22 @@ LogFile = ?
 Ignore =
 
 [SSH]
-Timeout = ?
-MaximumBytesToReceive = ?
-MaximumAttempts = ?
-Username = ?
-Password = ?
-PathToPrivateKey = ?
+Timeout = 10
+MaximumBytesToReceive = 8192
+MaximumAttempts = 3
+
+[Auth]
+hostname1 = customsection
+mygroup1-* = customsection_for_group
+
+[Auth.linux]
+key = ~/.ssh/id_rsa
+username = root
+
+[Auth.hp]
+username = 
+password = 
+
+[Auth.juniper]
+username = 
+password = 

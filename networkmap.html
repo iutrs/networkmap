@@ -4,28 +4,29 @@
     <title>networkmap</title>
     <meta charset="UTF-8">
 
+    <!-- JS -->
     <script type="text/javascript" src="./js/vis.js"></script>
     <script type="text/javascript" src="./js/jquery-1.11.2.min.js"></script>
     <script type="text/javascript" src="./js/networkmap.js"></script>
     <script type="text/javascript" src="./js/typeahead.bundle.min.js"></script>
-    <!-- Bootstrap sb-admin-2 theme (js)-->
-    <script type="text/javascript" src="./js/sb-admin-2/bootstrap.min.js"></script>
+
+    <script type="text/javascript" src="./js/bootstrap.min.js"></script>
     <script type="text/javascript" src="./js/sb-admin-2/sb-admin-2.js"></script>
     <script type="text/javascript" src="./js/sb-admin-2/metisMenu.js"></script>
 
-
+    <!-- CSS -->
     <link type="text/css" href="./css/vis.css" rel="stylesheet"/>
     <link type="text/css" href="./css/networkmap.css" rel="stylesheet"/>
     <link type="text/css" href="./css/typeahead.css" rel="stylesheet"/>
-    <!-- Bootstrap sb-admin-2 theme (css)-->
-    <link type="text/css" href="./css/sb-admin-2/bootstrap.min.css" rel="stylesheet"/>
-    <link type="text/css" href="./css/sb-admin-2/font-awesome.min.css" rel="stylesheet"/>
+
+    <link type="text/css" href="./css/font-awesome.min.css" rel="stylesheet"/>
+    <link type="text/css" href="./css/bootstrap.min.css" rel="stylesheet"/>
     <link type="text/css" href="./css/sb-admin-2/sb-admin-2.css" rel="stylesheet"/>
     <link type="text/css" href="./css/sb-admin-2/metisMenu.css" rel="stylesheet"/>
+
 </head>
 
 <body onload="draw();" onresize="network.redraw();" onkeypress="onKeyPress(event);">
-
     <div id="wrapper" class="row col-lg-12">
 
         <!-- Network section -->
@@ -45,33 +46,36 @@
 
         <!-- Options section -->
         <div class="col-lg-3 col-md-6 col-sm-6">
+
+            <!-- Search options -->
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h4 class="panel-title">
+                        <a href="#search" data-toggle="collapse">Search</a>
+                    </h4>
+                </div>
+                <div id="search" class="panel-body panel-collapse collapse in">
+                    <div class="input-group custom-search-form">
+                        <input id="deviceSearch" class="form-control typeahead" type="text" \
+                        placeholder="Find a device" onchange="selectNode(undefined, false)">
+                        </input>
+                        <span class="input-group-btn">
+                        <button id="btnFocus" class="btn btn-default" onclick="toggleFocusOnNode()"  type="button" style="margin-top:-2px">
+                            Focus
+                        </button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <!-- ./Search options -->
+
             <div class="panel panel-default">
                 <div class="panel-heading">
                     <h4 class="panel-title">
                         <a href="#options" data-toggle="collapse">Options</a>
                     </h4>
                 </div>
-                <div id="options" class="panel-body panel-collapse collapse in">
-
-                    <!-- Search options -->
-                    <div class="panel panel-default">
-                        <div class="panel-heading">
-                            <h4 class="panel-title">
-                                <a href="#search" data-toggle="collapse">Search</a>
-                            </h4>
-                        </div>
-                        <div id="search" class="panel-body panel-collapse collapse in">
-                            <input id="deviceSearch" class="form-control typeahead" type="text" \
-                                placeholder="Find a device" onchange="selectNode(undefined, false)">
-                            </input>
-                            <div>
-                                <button id="btnFocus" class="btn btn-default" onclick="toggleFocusOnNode()">
-                                    Focus
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- ./Search options -->
+                <div id="options" class="panel-body panel-collapse collapse">
 
                     <!-- General options -->
                     <div class="panel panel-default">

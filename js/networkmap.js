@@ -47,13 +47,12 @@ const SWITCH_UNREACHABLE_TITLE = "Switch unreachable."
 const SERVER_UNREACHABLE_TITLE = "Server unreachable."
 
 // General options
-//TODO Save to localStorage
-var showvms = false;
-var freezeSimulation = true;
+// If variable from local storage != null, assign it, otherwise set it's default value.
+var showvms = get("showvms", true) != null ? get("showvms", true) : false;
+var freezeSimulation = get("freezeSimulation", true) != null ? get("freezeSimulation", true) : true;
+var selectedVlanId = get("selectedVlanId", false) != null ? get("selectedVlanId", false) : "noVlanSelection";
 
-var focusedOnNode = false;
-
-var selectedVlanId = get("selectedVlanId") || "noVlanSelection";
+var focusedOnNode = false; //TODO Save to localStorage?
 
 // Loading the nodes' position
 var nodesPosition = getPositions();
@@ -395,6 +394,11 @@ function buildEdgeDescription(edge) {
     var deviceFrom = getDevice(edge.from);
     var deviceTo = getDevice(edge.to);
 
+    if (!(deviceFrom && deviceTo)) {
+        return "<p class='text-info'>Links between switches and virtual \
+            machines are not implemented yet.</p>";
+    }
+
     var incoherences = checkForIncoherencesBetween(deviceFrom, deviceTo);
 
     // We need tuples to compare vlans on same link
@@ -717,15 +721,22 @@ function prepareSearchEngine() {
         displayKey: "system_name",
         source: engine.ttAdapter()
     });
+
+    $("#deviceSearch").keypress(function(event) {
+        const ENTER_KEY_CODE = 13;
+        if (event.which == ENTER_KEY_CODE) {
+            selectNode(undefined, zoom=true);
+        }
+    });
 }
 
 /**
  * Adding the general options
  */
 function setGeneralOptionsAttributes() {
-    this.showvms ? $("#chkShowvms").attr("checked", "checked") : $("#chkShowvms").removeAttr("checked");
+    this.showvms ? $("#chkShowvms").prop("checked", "checked") : $("#chkShowvms").removeProp("checked");
 
-    this.freezeSimulation ? $("#chkFreezeSimulation").attr("checked", "checked") : $("#chkFreezeSimulation").removeAttr("checked");
+    this.freezeSimulation ? $("#chkFreezeSimulation").prop("checked", "checked") : $("#chkFreezeSimulation").removeProp("checked");
 }
 
 
@@ -734,6 +745,8 @@ function setGeneralOptionsAttributes() {
  */
 function showVmsNodes() {
     this.showvms = !this.showvms;
+    store("showvms", this.showvms, true);
+
     draw(); //TODO Find a way to make it load faster
 }
 
@@ -742,6 +755,8 @@ function showVmsNodes() {
  */
 function freezeNetworkSimulation() {
     this.freezeSimulation = !this.freezeSimulation;
+    store("freezeSimulation", this.freezeSimulation, true);
+
     network.freezeSimulation(this.freezeSimulation);
 }
 
@@ -812,12 +827,19 @@ function onSelect(properties) {
 function onNodeSelect(nodeId) {
     var device = getDevice(nodeId);
 
-    var content = buildNodeDescription(device);
-    $("#selectionInfo").html(content);
+    var htmlContent = "";
 
-    $("#deviceSearch").val(device.system_name);
+    if (device) {
+        htmlContent = buildNodeDescription(device);
+        $("#deviceSearch").val(device.system_name);
+    }
+    else {
+        htmlContent = "<p class='text-info'>Virtual machines information is not implemented yet.</p>"
+    }
+
+    $("#selectionInfo").html(htmlContent);
+
     network.selectNodes([nodeId]);
-    focusedOnNode = false;
 }
 
 /**
@@ -839,12 +861,11 @@ function onEdgeSelect(edge) {
 function toggleFocusOnNode() {
     if (focusedOnNode) {
         network.zoomExtent({duration:0});
+        focusedOnNode = false;
     }
     else {
         selectNode(undefined, zoom=true);
     }
-
-    focusedOnNode = !focusedOnNode;
 }
 
 /**
@@ -867,6 +888,7 @@ function selectNode(sysName, zoom) {
             onNodeSelect([device.mac_address]);
             if (zoom) {
                 network.focusOnNode(device.mac_address, {scale:1});
+                focusedOnNode = true;
             }
             break;
         }

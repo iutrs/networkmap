@@ -6,6 +6,10 @@ import os
 import paramiko
 
 
+class NoAuthRequested(Exception):
+    pass
+
+
 class AuthConfigError(Exception):
     pass
 
@@ -47,7 +51,7 @@ class AuthManager(object):
             hostname = hostname.lower()
             if fnmatch.fnmatch(hostname, pattern):
                 if section_name == "":
-                    return None
+                    raise NoAuthRequested("No auth requested for %s" % hostname)
 
                 full_section_name = "Auth.%s" % section_name
                 try:
@@ -115,9 +119,9 @@ username = admin_juniper
         self.auth_manager = AuthManager(parser)
 
     def test_by_plain_name_no_auth(self):
-        params = self.auth_manager.get_params(
-            "hostname_noauth", "hp")
-        self.assertEqual(params, None)
+        with self.assertRaises(NoAuthRequested):
+            params = self.auth_manager.get_params(
+                "hostname_noauth", "hp")
 
     def test_by_plain_name(self):
         params = self.auth_manager.get_params(

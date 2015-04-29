@@ -29,18 +29,19 @@ def _parse_args():
         the topology of a computing network by exploring every connected \
         switch using the LLDP protocol.")
     parser.add_argument("config", help="The configuration file.", type=str)
+    parser.add_argument('--verbose', '-v', action='store_true')
 
     return parser.parse_args()
 
 
-def _initialize_logger(logfile):
+def _initialize_logger(logfile, verbose):
     logging.getLogger().setLevel(logging.DEBUG)
     logging.getLogger("paramiko").setLevel(logging.WARNING)
 
     # Console logging handler
     handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(message)s")
+    handler.setLevel(logging.DEBUG if verbose else logging.INFO)
+    formatter = logging.Formatter(" %(levelname)s %(message)s")
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 
@@ -83,7 +84,7 @@ def main():
     conf.ssh_max_bytes = parser.getint('SSH', 'MaximumBytesToReceive')
     conf.ssh_max_attempts = parser.getint('SSH', 'MaximumAttempts')
 
-    _initialize_logger(conf.logfile)
+    _initialize_logger(conf.logfile, args.verbose)
 
     queue = Queue()
     queue.put(Device(system_name=conf.source_address))

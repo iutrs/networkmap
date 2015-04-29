@@ -14,15 +14,11 @@ import logging
 import paramiko
 
 from NetworkOutputParser import *
-from auth_manager import AuthManager, AuthConfigError
+from auth_manager import AuthManager, AuthConfigError, NoAuthRequested
 
 DEFAULT_TIMEOUT = 10
 DEFAULT_MAX_BYTES = 1024
 DEFAULT_MAX_ATTEMPTS = 1
-
-
-class NoAuthRequested(Exception):
-    pass
 
 
 class NetworkExplorer(object):
@@ -42,7 +38,6 @@ class NetworkExplorer(object):
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.shell = None
 
-        self.attempts_count = 0
         self.network_parser = None
 
         self.device = device
@@ -65,17 +60,17 @@ class NetworkExplorer(object):
         :type queue: Queue()
         """
 
-        # TODO Try new attempts when authentication fails
         try:
             self._open_ssh_connection()
         except NoAuthRequested as e:
-            logging.info("No auth requested for %s", self.hostname)
+            logging.info("[%s] No auth requested", self.hostname)
             return
         except paramiko.AuthenticationException as pae:
-            logging.warning("Authentication failed with %s.", self.hostname)
+            logging.error("[%s] Authentication failed: %s", self.hostname, pae)
             return
         except Exception as e:
-            logging.error("Error with %s: %s", self.hostname, e)
+            logging.error("[%s] Could not open SSH connection: %s",
+                self.hostname, e)
             return
 
         # Determining the type of the current device from the switch banner
@@ -83,7 +78,8 @@ class NetworkExplorer(object):
         self.network_parser = NetworkOutputParser.get_parser_type(banner)
 
         if self.network_parser is None:
-            logging.warning("Unsupported device type for %s. Prompt was: %s",
+            logging.warning(
+                "[%s] Unsupported device type. Prompt was: %s",
                 self.hostname, switch_prompt)
             return
 
@@ -92,16 +88,33 @@ class NetworkExplorer(object):
 
         # Building current device's informations if missing
         if self.device is None or self.device.mac_address is None:
-            self.device = self._build_current_device()
-
-        if self.device is None or self.device.mac_address is None:
-            logging.warning("Could not build device %s from its"
-                "local lldp information.", self.hostname)
-            return
-
-        logging.info("Discovering lldp neighbors for %s...", self.hostname)
+            local_report = self._get_lldp_local_report()
+            try:
+                self.device = self.network_parser.\
+                    parse_device_from_lldp_local_info(local_report)
+                if not self.device.mac_address:
+                    raise ValueError()
+            except Exception as e:
+                logging.error(
+                    "[%s] Unable to parse lldp local report using (%s): %s",
+                    self.hostname,
+                    self.network_parser.__class__.__name__,
+                    e)
+                return
 
         neighbors = self._build_lldp_neighbors(self.device)
+
+        vlans_result = self._get_vlans()
+        self._assign_vlans_to_interfaces(vlans_result)
+
+        trunks_result = self._get_trunks()
+        self.device.trunks = self.network_parser.parse_trunks(
+            self.device.interfaces,
+            trunks_result)
+
+        vm_result = self._get_virtual_machines()
+        self.device.virtual_machines = self.network_parser.parse_vms_list(
+            vm_result)
 
         self._close_ssh_connection()
 
@@ -115,48 +128,36 @@ class NetworkExplorer(object):
                 explored_devices[neighbor.mac_address] = neighbor
                 queue.put(neighbor)
 
-    def _build_current_device(self):
-        info = self._get_lldp_local_device()
-        device = self.network_parser.parse_device_from_lldp_local_info(info)
-        return device
-
     def _build_lldp_neighbors(self, device):
         """
         Obtain the list of all lldp neighbors
         """
-        neighbors_result = self._get_lldp_neighbors()
+        lldp_neighbors_summary = self._get_lldp_neighbors()
         device.interfaces = self.network_parser\
-            .parse_interfaces_from_lldp_remote_info(neighbors_result)
+            .parse_interfaces_from_lldp_remote_info(lldp_neighbors_summary)
 
-        if len(device.interfaces) > 0:
-            neighbors_result = ""
+        if len(device.interfaces) == 0:
+            neighbors = []
+            return neighbors
 
-        for interface in device.interfaces.values():
-            if interface.is_valid_lldp_interface():
-                port = interface.local_port
-                partial_result = self._get_lldp_neighbor_detail(port)
+        # With lldpd on Linux, the lldp summary already contains all details
+        if self.network_parser.lldp_neighbors_detail_cmd is None:
+            neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
+                device, lldp_neighbors_summary)
+        else:
+            lldp_neighbors_details = []
+            for interface in device.interfaces.values():
+                if interface.is_valid_lldp_interface():
+                    port = interface.local_port
+                    detail = self._get_lldp_neighbor_detail(port)
+                    lldp_neighbors_details.append(detail)
 
-                if partial_result is not None:
-                    neighbors_result += partial_result
-
-        neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
-            device, neighbors_result)
-
-        # TODO Move this to other functions?
-        vlans_result = self._get_vlans()
-        self._assign_vlans_to_interfaces(device.interfaces, vlans_result)
-
-        trunks_result = self._get_trunks()
-        device.trunks = self.network_parser.parse_trunks(device.interfaces,
-                                                         trunks_result)
-
-        vm_result = self._get_virtual_machines()
-        device.virtual_machines = self.network_parser.parse_vms_list(vm_result)
-        # TODO
+            neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
+                device, lldp_neighbors_details)
 
         return neighbors
 
-    def _assign_vlans_to_interfaces(self, interfaces, vlans_result):
+    def _assign_vlans_to_interfaces(self, vlans_result):
         """
         Parse the vlans result and assign them to the interfaces.
         """
@@ -169,7 +170,7 @@ class NetworkExplorer(object):
             # Some devices do not need to parse vlans from the global info and
             # can assign the vlans directly to interfaces from the first result
             self.network_parser.associate_vlans_to_interfaces(
-                interfaces, vlans_result)
+                self.device.interfaces, vlans_result)
 
         # Other devices need to get specific information from each vlan before
         # assigning it one by one to the interfaces
@@ -177,9 +178,9 @@ class NetworkExplorer(object):
             detail_str = self.network_parser.get_vlan_detail_str(vlan)
             specific_result = self._get_vlan_detail(detail_str)
             self.network_parser.associate_vlan_to_interfaces(
-                interfaces, vlan, specific_result)
+                self.device.interfaces, vlan, specific_result)
 
-    def _get_lldp_local_device(self):
+    def _get_lldp_local_report(self):
         command = self.network_parser.lldp_local_cmd
         return self._send_ssh_command(command)
 
@@ -211,12 +212,8 @@ class NetworkExplorer(object):
         """
         Opens a SSH connection with the device
         """
-        self.attempts_count += 1
 
         kwargs = self._auth_manager.get_params(self.hostname, self.device.type)
-
-        if kwargs is None:
-            raise NoAuthRequested("No auth method")
 
         kwargs.update({
             "hostname": self.hostname,
@@ -224,11 +221,21 @@ class NetworkExplorer(object):
             "allow_agent": False,
             "timeout": self.ssh_timeout})
 
-        self.ssh.connect(**kwargs)
+        nb_attempts = 0
+        while nb_attempts <= 3:
+            try:
+                self.ssh.connect(**kwargs)
+            except paramiko.AuthenticationException as pae:
+                raise # Do not retry if authentication failed
+            except Exception as e:
+                nb_attempts += 1
+            else:
+                break
+
         self.shell = self.ssh.invoke_shell()
         self.shell.set_combine_stderr(True)
 
-        logging.info("Connected to %s.", self.hostname)
+        logging.info("[%s] SSH connection established", self.hostname)
         time.sleep(1)
 
     def _close_ssh_connection(self):
@@ -239,10 +246,10 @@ class NetworkExplorer(object):
         try:
             self.shell.close()
             self.ssh.close()
-            logging.debug("Closed connection with %s.", self.hostname)
+            logging.debug("[%s] SSH connection closed", self.hostname)
         except Exception as e:
-            logging.warning("Could not close ssh connection with %s. %s",
-                            self.hostname, e)
+            logging.error("[%s] Could not close ssh connection: %s",
+                self.hostname, e)
 
     def _send_ssh_command(self, command):
         """
@@ -257,11 +264,10 @@ class NetworkExplorer(object):
             return None
 
         try:
-            logging.debug("Executing command '%s'...", command.rstrip())
+            logging.debug("[%s] Sending: %s", self.hostname, repr(command))
             self.shell.send(command)
 
             receive_buffer = ""
-
             # Waiting for the server to display all the data
             while not self.network_parser.wait_string in receive_buffer:
                 receive_buffer += self._receive_ssh_output()
@@ -269,8 +275,8 @@ class NetworkExplorer(object):
             return receive_buffer
 
         except Exception as e:
-            logging.warning("Could not send command to %s. %s",
-                            self.hostname, e)
+            logging.warning("[%s] Could not send command '%s': %s",
+                self.hostname, command, e)
 
     def _prepare_switch(self):
         """

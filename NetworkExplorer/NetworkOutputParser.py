@@ -69,7 +69,28 @@ class NetworkOutputParser(object):
         raise NotImplementedError()
 
 
-class HPNetworkOutputParser(NetworkOutputParser):
+class CommonSwitchParser(NetworkOutputParser):
+    def parse_devices_from_lldp_remote_info(self, device, neighbors_details):
+        devices = []
+
+        for detail in neighbors_details:
+            neighbor = Device()
+            for line in detail.splitlines():
+                if ':' in line:
+                    try:
+                        key, value = self._extract_key_and_value_from_line(line)
+                        self._attribute_lldp_remote_info(neighbor, key, value)
+                    except Exception as e:
+                        print e
+                        logging.error(
+                            "Could not parse network devices from %s:%s",
+                            detail, e)
+            devices.append(neighbor)
+
+        return devices
+
+
+class HPNetworkOutputParser(CommonSwitchParser):
     """Parses the output of Hewlett-Packard switches."""
     def __init__(self):
         self.wait_string = "#"
@@ -86,47 +107,18 @@ class HPNetworkOutputParser(NetworkOutputParser):
 
     def parse_device_from_lldp_local_info(self, result):
         device = Device()
+        for line in result.splitlines():
+            if not ':' in line:
+                continue
 
-        try:
-            for line in result.splitlines():
-                if not ':' in line:
-                    continue
+            key, value = self._extract_key_and_value_from_line(line)
 
-                key, value = self._extract_key_and_value_from_line(line)
+            self._attribute_lldp_local_info(device, key, value)
 
-                self._attribute_lldp_local_info(device, key, value)
-
-                if key == "Address":
-                    break
-
-        except Exception as e:
-            device = None
-            logging.error("Could not parse network device from : %s. (%s)",
-                          result, e)
+            if key == "Address":
+                break
 
         return device
-
-    def parse_devices_from_lldp_remote_info(self, device, result):
-        devices = []
-
-        try:
-            neighbor = Device()
-
-            for line in result.splitlines():
-                if ':' in line:
-                    key, value = self._extract_key_and_value_from_line(line)
-
-                    self._attribute_lldp_remote_info(neighbor, key, value)
-
-                elif '#' in line:
-                    devices.append(neighbor)
-                    neighbor = Device()
-
-        except Exception as e:
-            logging.error("Could not parse network devices from : %s. (%s)",
-                          result, e)
-
-        return devices
 
     def parse_interfaces_from_lldp_remote_info(self, result):
         interfaces = {}
@@ -341,7 +333,7 @@ class HPNetworkOutputParser(NetworkOutputParser):
             pass
 
 
-class JuniperNetworkOutputParser(NetworkOutputParser):
+class JuniperNetworkOutputParser(CommonSwitchParser):
     """Parses the output of Juniper switches."""
     def __init__(self):
         self.wait_string = ">"
@@ -357,57 +349,18 @@ class JuniperNetworkOutputParser(NetworkOutputParser):
 
     def parse_device_from_lldp_local_info(self, result):
         device = Device()
+        for line in result.splitlines():
+            if not ':' in line:
+                continue
 
-        try:
-            for line in result.splitlines():
-                if not ':' in line:
-                    continue
+            key, value = self._extract_key_and_value_from_line(line)
 
-                key, value = self._extract_key_and_value_from_line(line)
+            self._attribute_lldp_local_info(device, key, value)
 
-                self._attribute_lldp_local_info(device, key, value)
-
-                if key == "Enabled":
-                    break
-
-        except Exception as e:
-            device = None
-            logging.error("Could not parse network device from : %s. (%s)",
-                          result, e)
+            if key == "Enabled":
+                break
 
         return device
-
-    def parse_devices_from_lldp_remote_info(self, device, result):
-        devices = []
-
-        try:
-            # The important information is between the lines containing
-            # "Neighbour Information" and "Address".
-            # We skip the lines until we find "Neighbour Information"
-            # which indicates a new device is starting
-
-            skip_line = True
-            neighbor = Device()
-
-            for line in result.splitlines():
-                if "Neighbour Information" in line:
-                    skip_line = False
-
-                if ':' in line and not skip_line:
-                    key, value = self._extract_key_and_value_from_line(line)
-
-                    self._attribute_lldp_remote_info(neighbor, key, value)
-
-                if "Address" in line and not skip_line:
-                    devices.append(neighbor)
-                    neighbor = Device()
-                    skip_line = True
-
-        except Exception as e:
-            logging.error("Could not parse network devices from : %s. (%s)",
-                          result, e)
-
-        return devices
 
     def parse_interfaces_from_lldp_remote_info(self, result):
         interfaces = {}
@@ -580,21 +533,20 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         #TODO
         return Device()
 
-    def parse_devices_from_lldp_remote_info(self, device, result):
+    def parse_devices_from_lldp_remote_info(self, device, lldp_summary):
         devices = []
+
         try:
             neighbor = Device()
             interface = Interface()
-            line_count = 0
 
-            for line in result.splitlines():
-                line_count += 1
-
-                if ':' in line and line_count > 3:
+            interesting_lines = lldp_summary.splitlines()[4:] # Skip header
+            for line in interesting_lines:
+                if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
                     self._attribute_lldp_remote_info(neighbor, interface, key,
                                                      value)
-                elif "----" in line and line_count > 3:
+                elif "----" in line:
                     if interface.is_valid_lldp_interface():
                         device.interfaces[interface.local_port] = interface
                         interface = Interface()

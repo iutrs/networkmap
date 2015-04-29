@@ -1,5 +1,6 @@
 const jsonFile = "devices.json";
 var devices = null;
+var generationDate = null;
 
 // The JSON must be fully loaded before onload() happens for calling draw() on 'devices'
 $.ajaxSetup({
@@ -8,7 +9,8 @@ $.ajaxSetup({
 
 // Reading the JSON file containing the devices' informations
 $.getJSON(jsonFile, function(json) {
-    devices = json;
+    devices = json.devices;
+    generationDate = json.date;
 });
 
 // The objects used by vis
@@ -61,6 +63,10 @@ function draw() {
     if (devices == null) {
         errorMessage = "<font color='red'>Could not find '" + jsonFile + "'.</font>";
         $("#networkmap").html(errorMessage);
+    }
+
+    if (generationDate != null) {
+        $("#generationDate").html("Generated on " + generationDate);
     }
 
     nodes = [];
@@ -327,11 +333,11 @@ function buildNodeDescription(device) {
     }
 
     return (
-        "<b>Name:</b> " + device.system_name + "</br>" +
-        "<b>Description:</b> " + device.system_description + "</br>" +
-        "<b>" + ip_type + ":</b> " + ip + "</br>" +
-        "<b>MAC:</b> " + device.mac_address + "</br>" +
-        "<b>Capabilities:</b> " + device.enabled_capabilities + "</br>" +
+        "<label>Name:</label> " + device.system_name + "</br>" +
+        "<label>Description:</label> " + device.system_description + "</br>" +
+        "<label>" + ip_type + ":</label> " + ip + "</br>" +
+        "<label>MAC:</label> " + device.mac_address + "</br>" +
+        "<label>Capabilities:</label> " + device.enabled_capabilities + "</br>" +
         buildConnectedPortsList(device) +
         buildVirtualMachinesList(device)
     )
@@ -342,9 +348,12 @@ function buildNodeDescription(device) {
  */
 function buildConnectedPortsList(device) {
 
-    var connectedPorts = "<b>Connected interfaces:</b></br>";
-    var otherCount = 0;
+    // TODO Include DataTables for sorting and search?
+    var html = "<label>Connected interfaces:</label></br>";
+    html += "<div class='table-responsive'><table class='table table-striped table-condensed'>";
+    html += "<thead><tr><th>Local</th><th>Remote</th><th>Device</th></tr></thead><tbody>";
 
+    var otherCount = 0;
     var interfaces = Object.keys(device.interfaces).map(function(key){return device.interfaces[key];});
     interfaces.sort(function(a, b){return naturalCompare(a.local_port, b.local_port)});
 
@@ -352,20 +361,19 @@ function buildConnectedPortsList(device) {
         var int = interfaces[i];
         if (int.remote_system_name == "") {
             otherCount++;
+            continue;
         }
-        else {
-            var line = int.local_port + " --> ";
-            line += int.remote_port + " (";
-            line += int.remote_system_name + ")</br>";
-            connectedPorts += line;
-        }
+        html += "<tr><td>" + int.local_port + "</td>";
+        html += "<td>" + int.remote_port + "</td>";
+        html += "<td>" + int.remote_system_name + "</td></tr>";
     }
+    html += "</tbody></table></div>";
 
     if (otherCount > 0) {
-        connectedPorts += "<b>Other connections:</b> " + otherCount + "</br>";
+        html += "<label>Other connections:</label> " + otherCount + "</br>";
     }
 
-    return Object.keys(device.interfaces).length > 0 ? connectedPorts : "";
+    return Object.keys(device.interfaces).length > 0 ? html : "";
 }
 
 /**
@@ -373,16 +381,26 @@ function buildConnectedPortsList(device) {
  */
 function buildVirtualMachinesList(device) {
 
-    var output = "<b>Virtual machines:</b></br>";
+    // TODO Include DataTables for sorting and search?
+    var html = "<label>Virtual machines:</label></br>";
+    html += "<div class='table-responsive'><table class='table table-striped table-condensed'>";
+    html += "<thead><tr> \
+        <th class=''>ID</th> \
+        <th class=''>Name</th> \
+        <th class=''>State</th> \
+        </tr></thead><tbody>";
 
+    device.virtual_machines.sort(function(a, b){return naturalCompare(a.name, b.name)});
     for (var i = 0; i < device.virtual_machines.length; i++) {
         var vm = device.virtual_machines[i];
 
-        var line = vm.identifier + " | <b>" + vm.name + "</b> (" + vm.state + ")";
-        output += line + "</br>";
+        html += "<tr><td class=''>" + vm.identifier + "</td>";
+        html += "<td class=''>" + vm.name + "</td>";
+        html += "<td class=''>" +  vm.state + "</td></tr>";
+        // TODO Put icon for the vm state instead of string? Or maybe a color?
     }
 
-    return device.virtual_machines.length > 0 ? output : "";
+    return device.virtual_machines.length > 0 ? html : "";
 }
 
 /**
@@ -395,7 +413,7 @@ function buildEdgeDescription(edge) {
     var deviceTo = getDevice(edge.to);
 
     if (!(deviceFrom && deviceTo)) {
-        return "<p class='text-info'>Links between switches and virtual \
+        return "<p class='text-info'>Links between servers and virtual \
             machines are not implemented yet.</p>";
     }
 

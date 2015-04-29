@@ -55,8 +55,9 @@ def _initialize_logger(logfile, verbose):
 
 
 def _write_results_to_file(results, outputfile):
+    output = "{ \"date\": \"" + time.strftime("%c") +  "\",\n"
     values = ",\n".join(value.to_JSON() for value in results.values())
-    output = "[" + values + "]"
+    output += "\"devices\": [" + values + "]}"
 
     with open(outputfile, "w") as _file:
         _file.write(output.encode('utf8'))

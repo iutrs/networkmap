@@ -34,10 +34,6 @@ class NetworkExplorer(object):
                  ssh_max_bytes=DEFAULT_MAX_BYTES,
                  ssh_max_attempts=DEFAULT_MAX_ATTEMPTS):
 
-        self.ssh = paramiko.SSHClient()
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.shell = None
-
         self.network_parser = None
 
         self.device = device
@@ -224,6 +220,8 @@ class NetworkExplorer(object):
         nb_attempts = 0
         while nb_attempts <= 3:
             try:
+                self.ssh = paramiko.SSHClient()
+                self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 self.ssh.connect(**kwargs)
             except paramiko.AuthenticationException as pae:
                 raise # Do not retry if authentication failed
@@ -268,24 +266,22 @@ class NetworkExplorer(object):
             self.shell.send(command)
 
             receive_buffer = ""
-            # Waiting for the server to display all the data
-            while not self.network_parser.wait_string in receive_buffer:
+            wait_string = self.network_parser.wait_string
+            length_when_mark_detected = 0
+            while True:
+                time.sleep(0.1)
                 receive_buffer += self._receive_ssh_output()
+                if len(receive_buffer) == length_when_mark_detected != 0:
+                    break
+                if wait_string in receive_buffer[length_when_mark_detected:]:
+                    length_when_mark_detected = len(receive_buffer)
 
+            logging.debug("[%s] Got response (len=%d)", self.hostname, length_when_mark_detected)
             return receive_buffer
 
         except Exception as e:
             logging.warning("[%s] Could not send command '%s': %s",
                 self.hostname, command, e)
-
-    def _prepare_switch(self):
-        """
-        Sends the preparation commands to the device such as pressing
-        a key to skip the banner or as removing pagination.
-        """
-        for cmd in self.network_parser.preparation_cmds:
-            time.sleep(0.5)
-            self._send_ssh_command(cmd)
 
     def _receive_ssh_output(self):
         """
@@ -295,10 +291,11 @@ class NetworkExplorer(object):
         :return: Returns the cleaned output of the device
         :rtype: str
         """
-        if self.shell.recv_ready:
-            time.sleep(0.1)
+        if self.shell.recv_ready():
             raw_output = self.shell.recv(self.ssh_max_bytes)
             return self._remove_ansi_escape_codes(raw_output.decode('utf8'))
+        else:
+            return ""
 
     def _remove_ansi_escape_codes(self, string):
         """
@@ -313,3 +310,12 @@ class NetworkExplorer(object):
         expression = r"\[\d{1,2}\;\d{1,2}[a-zA-Z]?\d?|\[\??\d{1,2}[a-zA-Z]"
         ansi_escape = re.compile(expression)
         return ansi_escape.sub('', string.replace(u"\u001b", ""))
+
+    def _prepare_switch(self):
+        """
+        Sends the preparation commands to the device such as pressing
+        a key to skip the banner or as removing pagination.
+        """
+        for cmd in self.network_parser.preparation_cmds:
+            time.sleep(0.5)
+            self._send_ssh_command(cmd)

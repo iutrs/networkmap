@@ -41,7 +41,7 @@ def _initialize_logger(logfile, verbose):
     # Console logging handler
     handler = logging.StreamHandler()
     handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-    formatter = logging.Formatter(" %(levelname)s %(message)s")
+    formatter = logging.Formatter("%(levelname)s %(message)s")
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 

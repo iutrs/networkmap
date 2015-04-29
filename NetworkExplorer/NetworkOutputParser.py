@@ -347,6 +347,8 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
         self.vlans_specific_cmd = None
         self.vms_list_cmd = None
 
+        self.trunks = {}
+
     def parse_device_from_lldp_local_info(self, result):
         device = Device()
         for line in result.splitlines():
@@ -363,6 +365,23 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
         return device
 
     def parse_interfaces_from_lldp_remote_info(self, result):
+        """
+        Example of "show lldp neighbors" command result:
+
+        Local Interface    Parent Interface    Chassis Id          Port info
+        ge-1/0/46.0        -                   00:0e:7f:6e:c1:20   23
+        ge-0/0/37.0        -                   00:0f:fe:7d:7c:68   eth0
+        ge-1/0/16.0        -                   00:1f:29:01:dc:b7   eth0
+        ge-0/0/47.0        ae0.0               00:21:f7:1e:25:80   23
+        ge-1/0/47.0        ae0.0               00:21:f7:1e:25:80   24
+        ge-1/0/42.0        -                   00:23:7d:5a:2d:ae   eth1
+        ge-1/0/43.0        -                   00:23:7d:5b:09:f4   eth1
+        ge-1/0/44.0        -                   00:23:7d:a7:48:4a   eth1
+        ge-1/0/38.0        -                   9c:8e:99:19:99:78   eth3
+
+        {master:1}
+        admin@info4200-1>
+        """
         interfaces = {}
 
         try:
@@ -370,27 +389,32 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
                 if len(line) <= 73:
                     continue
 
-                interface = self._parse_interface_from_line(line)
-                if interface.local_port != "Local Interface":
+                local_int = line[:18].strip()
+                parent_int = line[19:38].strip()
+                chassis_id = line[39:58].strip().replace(':', ' ')
+                port_info = line[59:71].strip()
+                sys_name = line[72:].strip()
+
+                if local_int != "Local Interface":
+                    interface = Interface(local_port=local_int,
+                                          remote_port=port_info,
+                                          remote_mac_address=chassis_id,
+                                          remote_system_name=sys_name)
                     interfaces[interface.local_port] = interface
+
+                # Checking for trunk
+                if parent_int in self.trunks:
+                    self.trunks[parent_int].ports.append(local_int)
+                elif parent_int != "-" and parent_int != "Parent Interface":
+                    self.trunks[parent_int] = Trunk(group=parent_int,
+                                                    name=parent_int,
+                                                    ports=[local_int])
 
         except Exception as e:
             logging.error("Could not extract interfaces from : %s. (%s)",
                           result, e)
 
         return interfaces
-
-    def _parse_interface_from_line(self, line):
-
-        local_port = line[:18].strip()
-        chassis_id = line[39:58].strip().replace(':', ' ')
-        port_descr = line[59:71].strip()
-        sys_name = line[72:].strip()
-
-        return Interface(local_port=local_port,
-                         remote_port=port_descr,
-                         remote_mac_address=chassis_id,
-                         remote_system_name=sys_name)
 
     def parse_vlans(self, result):
         return {}
@@ -399,6 +423,34 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
         return vlan.identifier
 
     def associate_vlans_to_interfaces(self, interfaces, result):
+        """
+        Example of 'show vlans detail' command:
+
+        VLAN: vlan946, 802.1Q Tag: 946, Admin State: Enabled
+          Primary IP: 192.168.84.15/24
+        Number of interfaces: 3 (Active = 2)
+          Tagged interfaces: ae0.0*, ge-0/0/46.0, ge-1/0/46.0*
+
+        VLAN: vlan947, 802.1Q Tag: 947, Admin State: Enabled
+        Number of interfaces: 41 (Active = 36)
+          Untagged interfaces: ge-0/0/0.0*, ge-0/0/1.0*, ge-0/0/2.0*, ge-0/0/3.0*,
+          ge-0/0/5.0, ge-0/0/6.0*, ge-0/0/7.0*, ge-0/0/8.0*, ge-0/0/9.0*, ge-0/0/10.0*,
+          ge-0/0/11.0*, ge-0/0/12.0*, ge-0/0/13.0*, ge-0/0/14.0*, ge-0/0/15.0*,
+          ge-0/0/16.0*, ge-0/0/17.0, ge-0/0/18.0*, ge-0/0/20.0*, ge-0/0/21.0*,
+          ge-0/0/22.0*, ge-0/0/23.0*, ge-0/0/30.0*, ge-0/0/31.0, ge-0/0/41.0,
+          ge-0/0/42.0, ge-1/0/17.0*, ge-1/0/18.0*, ge-1/0/19.0*, ge-1/0/20.0*,
+          ge-1/0/21.0*, ge-1/0/22.0*, ge-1/0/23.0*, ge-1/0/24.0*, ge-1/0/25.0*,
+          ge-1/0/26.0*, ge-1/0/27.0*, ge-1/0/28.0*, ge-1/0/34.0*, ge-1/0/35.0*
+          Tagged interfaces: ge-1/0/46.0*
+
+        VLAN: vlan948, 802.1Q Tag: 948, Admin State: Enabled
+        Number of interfaces: 3 (Active = 3)
+          Untagged interfaces: ge-0/0/4.0*, ge-0/0/19.0*
+          Tagged interfaces: ge-1/0/46.0*
+
+        {master:1}
+        admin@info4200-1>
+        """
         try:
             vlan = Vlan()
 
@@ -434,6 +486,11 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
                             if p in interfaces:
                                 interfaces[p].add_vlan(vlan)
 
+                            elif p in self.trunks: #TODO CHECK FOR TRUNKS
+                                for port in self.trunks[p].ports:
+                                    if port in interfaces:
+                                        interfaces[port].add_vlan(vlan)
+
                     if "Tagged" in line:
                         vlan = Vlan()
 
@@ -441,42 +498,7 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
             logging.error("Could not extract vlans from : %s. (%s)", result, e)
 
     def parse_trunks(self, interfaces, trunks_result):
-        """
-        Example of "show lldp neighbors" command result:
-
-        Local Interface    Parent Interface    Chassis Id          Port info
-        ge-1/0/46.0        -                   00:0e:7f:6e:c1:20   23
-        ge-0/0/37.0        -                   00:0f:fe:7d:7c:68   eth0
-        ge-1/0/16.0        -                   00:1f:29:01:dc:b7   eth0
-        ge-0/0/47.0        ae0.0               00:21:f7:1e:25:80   23
-        ge-1/0/47.0        ae0.0               00:21:f7:1e:25:80   24
-        ge-1/0/42.0        -                   00:23:7d:5a:2d:ae   eth1
-        ge-1/0/43.0        -                   00:23:7d:5b:09:f4   eth1
-        ge-1/0/44.0        -                   00:23:7d:a7:48:4a   eth1
-        ge-1/0/38.0        -                   9c:8e:99:19:99:78   eth3
-
-        {master:1}
-        admin@info4200-1>
-        """
-        trunks = {}
-
-        try:
-            for line in trunks_result.splitlines():
-                if len(line) <= 38:
-                    continue
-
-                port = line[:18].strip()
-                name = line[19:38].strip()
-                if name in trunks:
-                    trunks[name].ports.append(port)
-                elif name != "-" and name != "Parent Interface":
-                    trunks[name] = Trunk(group=name, name=name, ports=[port])
-
-        except Exception as e:
-            logging.error("Could not parse trunks from : %s. (%s)",
-                          trunks_result, e)
-
-        return trunks
+        return self.trunks
 
     def parse_vms_list(self, vm_result):
         return []

@@ -6,3 +6,8 @@ a:link, a:visited, a:hover, a:active {
 #networkmap {
     height: 90vh;
 }
+
+#selectionInfo {
+    max-height: 70vh;
+    overflow: auto;
+}

@@ -93,7 +93,7 @@ class CommonSwitchParser(NetworkOutputParser):
 class HPNetworkOutputParser(CommonSwitchParser):
     """Parses the output of Hewlett-Packard switches."""
     def __init__(self):
-        self.wait_string = "#"
+        self.wait_string = "# "
         self.preparation_cmds = ["\n", "no page\n"]
         self.lldp_local_cmd = "show lldp info local-device\n"
         self.lldp_neighbors_cmd = "show lldp info remote-device\n"
@@ -336,7 +336,7 @@ class HPNetworkOutputParser(CommonSwitchParser):
 class JuniperNetworkOutputParser(CommonSwitchParser):
     """Parses the output of Juniper switches."""
     def __init__(self):
-        self.wait_string = ">"
+        self.wait_string = "> "
         self.preparation_cmds = ["set cli screen-length 0\n",
                                  "set cli screen-width 0\n"]
         self.lldp_local_cmd = "show lldp local-information\n"
@@ -539,7 +539,7 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
 class LinuxNetworkOutputParser(NetworkOutputParser):
     """Parses the output of Linux servers."""
     def __init__(self):
-        self.wait_string = "#"
+        self.wait_string = "# "
         self.preparation_cmds = []
         self.lldp_local_cmd = None
         self.lldp_neighbors_cmd = "lldpctl\n"

@@ -31,22 +31,15 @@ var vlanIncoherenceColor = get("vlanIncoherenceColor") || "#FF0000";
 //var serverDefaultColor = "#00FFBF";
 //var vmDefaultColor = "#FF9900";
 
-// Images path
+// Images/icons constants
 const ICONS_DIR = "./css/img/hardware/";
-const SWITCH_IMG = ICONS_DIR + "switch.png"
-const SERVER_IMG = ICONS_DIR + "server.png"
-const SWITCH_WARNING_IMG = ICONS_DIR + "switch_warning.png"
-const SERVER_WARNING_IMG = ICONS_DIR + "server_warning.png"
-const SWITCH_UNREACHABLE_IMG = ICONS_DIR + "switch_unreachable.png"
-const SERVER_UNREACHABLE_IMG = ICONS_DIR + "server_unreachable.png"
+const ICONS_EXT = ".png";
+const SWITCH = "switch"
+const SERVER = "server"
+const WARNING = "_warning";
+const UNREACHABLE = "_unreachable";
 
-// Title for images
-const SWITCH_TITLE = undefined;
-const SERVER_TITLE = undefined;
-const SWITCH_WARNING_TITLE = "Incoherences found."
-const SERVER_WARNING_TITLE = "Incoherences found."
-const SWITCH_UNREACHABLE_TITLE = "Switch unreachable."
-const SERVER_UNREACHABLE_TITLE = "Server unreachable."
+const NO_INTERFACES_FOUND = "No interfaces found.";
 
 // General options
 // If variable from local storage != null, assign it, otherwise set it's default value.
@@ -107,7 +100,7 @@ function draw() {
     };
 
     // Using jQuery to get the element does not work with vis.js library
-    var container = document.getElementById("networkmap")
+    var container = document.getElementById("networkmap");
 
     network = new vis.Network(container, data, options);
     network.freezeSimulation(this.freezeSimulation);
@@ -128,27 +121,30 @@ function createNodes() {
     for (var i = 0; i < devices.length; i++) {
         var device = devices[i];
 
-        var img = SWITCH_IMG;
-        var title = SWITCH_TITLE;
+        var title = undefined;
+        var img = SWITCH;
+
+        if (device.system_description && device.system_description.indexOf("Linux") > -1) {
+            img = SERVER;
+        }
+
+        if (device.status != null) {
+            title = device.status;
+            img += UNREACHABLE;
+        }
+        else if (Object.keys(device.interfaces).length == 0) {
+            title = NO_INTERFACES_FOUND;
+            img += WARNING;
+        }
+
+        img = ICONS_DIR + img + ICONS_EXT;
 
         var interfacesLength = Object.keys(device.interfaces).length
-        if (interfacesLength == 0) {
-            img = SWITCH_UNREACHABLE_IMG;
-            title = SWITCH_UNREACHABLE_TITLE;
-        }
-        else if (device.system_description && device.system_description.indexOf("Linux") > -1) {
-            img = SERVER_IMG;
-            title = SERVER_TITLE;
-        }
 
-        posX = undefined;
-        posY = undefined;
+        var storedPos = getPosition(device.mac_address);
 
-        storedPos = getPosition(device.mac_address);
-        if (storedPos) {
-            posX = storedPos[0];
-            posY = storedPos[1];
-        }
+        var posX = storedPos ? storedPos[0] : undefined;
+        var posY = storedPos ? storedPos[1] : undefined;
 
         nodes.push(
         {
@@ -238,7 +234,7 @@ function createEdges() {
 
             for (var index in int.vlans) {
                 if (!(index in myVlans)) {
-                    myVlans[index] = int.vlans[index]
+                    myVlans[index] = int.vlans[index];
                 }
             }
         }
@@ -275,7 +271,7 @@ function createEdges() {
         labelTo = getStringifiedInterface(interfacesTo) || labelTo;
     }
 
-    return [labelFrom, labelTo]
+    return [labelFrom, labelTo];
  }
 
 /**
@@ -293,7 +289,7 @@ function getStringifiedTrunk(int_port, device) {
             if (int_port == port) {
                 interfaceIsTrunked = true;
             }
-            stringfiedTrunk += port + " "
+            stringfiedTrunk += port + " ";
         }
 
         if (interfaceIsTrunked) {
@@ -321,7 +317,7 @@ function getStringifiedInterface(interfaces) {
 /**
  * Builds node description
  */
-function buildNodeDescription(device) {
+function buildDeviceDescription(device) {
     var ip = "?";
     var ip_type = "IP";
 
@@ -332,15 +328,26 @@ function buildNodeDescription(device) {
         ip_type = device.ip_address_type.toUpperCase();
     }
 
-    return (
+    var problems = "";
+
+    if (device.status != null) {
+        problems = "<p class=text-danger>Error: " + device.status + "</p>";
+    }
+    else if (Object.keys(device.interfaces).length <= 0) {
+        problems = "<p class=text-danger>Error: " + NO_INTERFACES_FOUND + "</p>";
+    }
+
+    var html =
+        problems +
         "<label>Name:</label> " + device.system_name + "</br>" +
         "<label>Description:</label> " + device.system_description + "</br>" +
         "<label>" + ip_type + ":</label> " + ip + "</br>" +
         "<label>MAC:</label> " + device.mac_address + "</br>" +
         "<label>Capabilities:</label> " + device.enabled_capabilities + "</br>" +
         buildConnectedPortsList(device) +
-        buildVirtualMachinesList(device)
-    )
+        buildVirtualMachinesList(device);
+
+    return html;
 }
 
 /**
@@ -385,10 +392,10 @@ function buildVirtualMachinesList(device) {
     var html = "<label>Virtual machines:</label></br>";
     html += "<div class='table-responsive'><table class='table table-striped table-condensed'>";
     html += "<thead><tr> \
-        <th class=''>ID</th> \
-        <th class=''>Name</th> \
-        <th class=''>State</th> \
-        </tr></thead><tbody>";
+            <th class=''>ID</th> \
+            <th class=''>Name</th> \
+            <th class=''>State</th> \
+            </tr></thead><tbody>";
 
     device.virtual_machines.sort(function(a, b){return naturalCompare(a.name, b.name)});
     for (var i = 0; i < device.virtual_machines.length; i++) {
@@ -535,7 +542,7 @@ function getInterfaceTuples(deviceFrom, deviceTo) {
             var toRecognizesFrom = comparePortNames(intTo.remote_port, intFrom.local_port);
 
             if (fromRecognizesTo && toRecognizesFrom) {
-                tuples.push([intFrom, intTo])
+                tuples.push([intFrom, intTo]);
             }
         }
     }
@@ -558,7 +565,7 @@ function stringifyInterfaceTuple(intFrom, intTo) {
     var vlansTo = vlansOnInterface[1];
 
     // Vlan differences
-    var vlanDifferences = vlansIdsTo.diff(vlansIdsFrom)
+    var vlanDifferences = vlansIdsTo.diff(vlansIdsFrom);
 
     var stringFrom = intFrom ? "Vlans on <b>" + intFrom.local_port + "</b>&nbsp:</br>" : "-";
 
@@ -854,7 +861,7 @@ function onNodeSelect(nodeId) {
     var htmlContent = "";
 
     if (device) {
-        htmlContent = buildNodeDescription(device);
+        htmlContent = buildDeviceDescription(device);
         $("#deviceSearch").val(device.system_name);
     }
     else {
@@ -920,6 +927,15 @@ function selectNode(sysName, zoom) {
 }
 
 /**
+ * Resets the nodes and the edges in the network
+ */
+function resetData() {
+    network.freezeSimulation(false);
+    network.setData({nodes: nodes, edges: edges});
+    network.freezeSimulation(this.freezeSimulation);
+}
+
+/**
  * Get the interface connected from a device to another known mac address
  */
 function getInterfaceConnectedTo(device, macAdress) {
@@ -974,7 +990,7 @@ function getVlansOnInterface(int) {
         vlans.sort(function(a, b){return parseInt(a.identifier) > parseInt(b.identifier)});
     }
 
-    return [vlansIds, vlans]
+    return [vlansIds, vlans];
 }
 
 /**
@@ -1030,6 +1046,11 @@ function edgeExists(link) {
         }
     }
 }
+
+/** ----- **/
+
+/** **/
+/** localStorage Section **/
 
 /**
  * Saves the position of all nodes in local storage.
@@ -1087,15 +1108,6 @@ function getPosition(nodeID) {
 }
 
 /**
- * Resets the nodes and the edges in the network
- */
-function resetData() {
-    network.freezeSimulation(false);
-    network.setData({nodes: nodes, edges: edges});
-    network.freezeSimulation(this.freezeSimulation);
-}
-
-/**
  * Store the value in the local storage
  */
 function store(key, content, json) {
@@ -1119,6 +1131,13 @@ function clear(key) {
         delete localStorage[key];
     }
 };
+/** /.localStorage Section **/
+/** **/
+
+/** ----- **/
+
+/** **/
+/** Utilities Section **/
 
 /**
  * Returns the differences between two arrays
@@ -1209,3 +1228,6 @@ function comparePortNames(a, b) {
         });
     };
 })(jQuery);
+
+/** /.Utilities Section **/
+/** **/

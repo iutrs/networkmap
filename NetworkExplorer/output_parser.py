@@ -9,7 +9,7 @@ Date   : Mars 2015
 import re
 import logging
 
-from NetworkObjects import *
+from network_objects import *
 
 
 class NetworkOutputParser(object):
@@ -76,14 +76,15 @@ class CommonSwitchParser(NetworkOutputParser):
         for detail in neighbors_details:
             neighbor = Device()
             for line in detail.splitlines():
-                if ':' in line:
-                    try:
-                        key, value = self._extract_key_and_value_from_line(line)
-                        self._attribute_lldp_remote_info(neighbor, key, value)
-                    except Exception as e:
-                        logging.error(
-                            "Could not parse network devices from %s:%s",
-                            detail, e)
+                if not ':' in line:
+                    continue
+                try:
+                    key, value = self._extract_key_and_value_from_line(line)
+                    self._attribute_lldp_remote_info(neighbor, key, value)
+                except Exception as e:
+                    logging.error(
+                        "Could not parse network devices from %s:%s",
+                        detail, e)
             devices.append(neighbor)
 
         return devices
@@ -105,6 +106,32 @@ class HPNetworkOutputParser(CommonSwitchParser):
         self.vlans_affected_to_trunks = {}
 
     def parse_device_from_lldp_local_info(self, result):
+        """
+        Example of "show lldp info local-device" command result:
+
+         LLDP Local Device Information
+
+          Chassis Type : mac-address
+          Chassis Id   : 00 15 60 2a fa 40        
+          System Name  : CENTRAL2626-1                 
+          System Description : ProCurve J4900B Switch 2626, revision H.10.83, ROM H...
+          System Capabilities Supported:bridge, router
+          System Capabilities Enabled:bridge
+
+          Management Address  :
+             Type:ipv4
+             Address:192.168.84.53
+
+         LLDP Port Information
+
+          Port     | PortType PortId   PortDesc
+          -------- + -------- -------- --------
+          1        | local    1        1       
+          2        | local    2        2       
+          3        | local    3        3       
+
+        CENTRAL2626-1#
+        """
         device = Device()
         for line in result.splitlines():
             if not ':' in line:
@@ -114,12 +141,37 @@ class HPNetworkOutputParser(CommonSwitchParser):
 
             self._attribute_lldp_local_info(device, key, value)
 
-            if key == "Address":
+            if key == "Address":  #No information is important after that
                 break
 
         return device
 
     def parse_interfaces_from_lldp_remote_info(self, result):
+        """
+        Example of "show lldp info remote-device" command result:
+
+         LLDP Remote Devices Information
+
+          LocalPort | ChassisId                 PortId PortDescr SysName               
+          --------- + ------------------------- ------ --------- ----------------------
+          A1        | 78 fe 3d 46 6e c0         505    adm ur... iut-sud-ce1           
+          A2        | 78 fe 3d 46 6e c0         533    X GTB     iut-sud-ce1           
+          A2        | 00-1f-45-5d-48-2c         ge.1.6                                 
+          A3        | 78 fe 3d 46 6e c0         531    IUT Su... iut-sud-ce1           
+          A13       | 00 9c 02 d8 66 00         52     52        CENTRAL380048G-1      
+          A14       | 00 9c 02 d8 66 00         50     50        CENTRAL380048G-1      
+          A15       | 00 1f fe 83 89 00         1      A1        CENTRAL5412-1         
+          A16       | 00 1f fe 83 89 00         25     B1        CENTRAL5412-1         
+          B1        | 00 1f 28 55 bd 00         52     52        LEONARDO261048PWR-1   
+          B2        | 00 0d 9d b9 a5 80         50     50        CHIMIE2650-1          
+          B3        | 00 18 71 a5 6e 00         1      A1        CIVIL5308-1           
+          B4        | 00 11 85 57 f6 00         16     A16       INFOCOM5308-1         
+          C1        | 00 1d b3 f6 e9 00         28     28        MEDIUTPWR261024-1     
+          C2        | 00 0e 7f 6e c1 20         24     24        INFO2824-1            
+          C4        | 00 11 85 57 f6 00         30     B4        INFOCOM5308-1         
+
+        CENTRAL5304-1#
+        """
         interfaces = {}
 
         try:
@@ -147,6 +199,33 @@ class HPNetworkOutputParser(CommonSwitchParser):
                          remote_system_name=sys_name)
 
     def parse_vlans(self, result):
+        """
+        Example of "show vlans" command result:
+
+         Status and Counters - VLAN Information
+
+          Maximum VLANs to support : 128                  
+          Primary VLAN : DEFAULT_VLAN
+          Management VLAN :             
+
+          VLAN ID Name                 | Status     Voice
+          ------- -------------------- + ---------- -----
+          1       DEFAULT_VLAN         | Port-based No   
+          41      scdpro               | Port-based No   
+          52      rch iut sud          | Port-based No   
+          53      ens iutinfo          | Port-based No   
+          666     iutsud prive         | Port-based No   
+          749     ipv6-info-in         | Port-based No   
+          789     scdpublic            | Port-based No   
+          796     toip tel ill         | Port-based Yes  
+          799     toip srv urs         | Port-based Yes  
+          947     iutrs-termin         | Port-based No   
+          948     iutrs-imprim         | Port-based No   
+          2999    toip alcatel         | Port-based Yes  
+
+        CENTRAL5304-1#
+        """
+
         vlans = {}
         try:
             # Here we try to find the index in between the interesting values
@@ -184,6 +263,32 @@ class HPNetworkOutputParser(CommonSwitchParser):
         pass
 
     def associate_vlan_to_interfaces(self, interfaces, vlan, specific_result):
+        """
+        Example of "show vlans {0}" command result:
+
+         Status and Counters - VLAN Information - Ports - VLAN 52
+
+          VLAN ID : 52     
+          Name : rch iut sud         
+          Status : Port-based
+          Voice : No 
+
+          Port Information Mode     Unknown VLAN Status    
+          ---------------- -------- ------------ ----------
+          A7               Tagged   Learn        Up        
+          B1               Tagged   Learn        Up        
+          B2               Tagged   Learn        Up        
+          B3               Tagged   Learn        Up        
+          C1               Tagged   Learn        Up        
+          C2               Tagged   Learn        Up        
+          C3               Tagged   Learn        Down      
+          Trk1             Tagged   Learn        Up        
+          Trk2             Tagged   Learn        Up        
+          Trk3             Tagged   Learn        Up        
+         
+
+        CENTRAL5304-1
+        """
         try:
             # Here we try to find the index in between the interesting values
             # instead of using regular expressions because the output is not
@@ -349,6 +454,31 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
         self.trunks = {}
 
     def parse_device_from_lldp_local_info(self, result):
+        """
+        Example of "show lldp local-information" command result:
+
+        LLDP Local Information details
+
+        Chassis ID   : 50:c5:8d:a2:a6:00
+        System name  : info4200-1
+        System descr : Juniper Networks, Inc. ex4200-48t , version 10.4R3.4 Build date: 2011-03-19 22:17:08 UTC 
+
+        System Capabilities
+            Supported       : Bridge Router 
+            Enabled         : Bridge Router 
+
+        Interface name    Parent Interface  SNMP Index      Interface description    Status    Tunneling
+        me0.0             -                 34              me0.0                    Down      Disabled 
+        ge-0/0/0.0        -                 503             ge-0/0/0.0               Up        Disabled 
+        ge-1/0/44.0       -                 743             ge-1/0/44.0              Up        Disabled 
+        ge-1/0/45.0       -                 744             -                        Down      Disabled 
+        ge-1/0/46.0       -                 745             ge-1/0/46.0              Up        Disabled 
+        ge-1/0/47.0       ae0.0             703             ge-1/0/47.0              Up        Disabled 
+        xe-1/1/0.0        -                 751             xe-1/1/0.0               Up        Disabled 
+
+        {master:1}
+        admin@info4200-1> 
+        """
         device = Device()
         for line in result.splitlines():
             if not ':' in line:
@@ -358,7 +488,7 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
 
             self._attribute_lldp_local_info(device, key, value)
 
-            if key == "Enabled":
+            if key == "Enabled":  #No information is important after that
                 break
 
         return device
@@ -423,7 +553,7 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
 
     def associate_vlans_to_interfaces(self, interfaces, result):
         """
-        Example of 'show vlans detail' command:
+        Example of 'show vlans detail' command result:
 
         VLAN: vlan946, 802.1Q Tag: 946, Admin State: Enabled
           Primary IP: 192.168.84.15/24
@@ -432,8 +562,8 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
 
         VLAN: vlan947, 802.1Q Tag: 947, Admin State: Enabled
         Number of interfaces: 41 (Active = 36)
-          Untagged interfaces: ge-0/0/0.0*, ge-0/0/1.0*, ge-0/0/2.0*, ge-0/0/3.0*,
-          ge-0/0/5.0, ge-0/0/6.0*, ge-0/0/7.0*, ge-0/0/8.0*, ge-0/0/9.0*, ge-0/0/10.0*,
+          Untagged interfaces: ge-0/0/0.0*, ge-0/0/1.0*, ge-0/0/2.0*,
+          ge-0/0/5.0, ge-0/0/6.0*, ge-0/0/7.0*, ge-0/0/8.0*, ge-0/0/9.0*,
           ge-0/0/11.0*, ge-0/0/12.0*, ge-0/0/13.0*, ge-0/0/14.0*, ge-0/0/15.0*,
           ge-0/0/16.0*, ge-0/0/17.0, ge-0/0/18.0*, ge-0/0/20.0*, ge-0/0/21.0*,
           ge-0/0/22.0*, ge-0/0/23.0*, ge-0/0/30.0*, ge-0/0/31.0, ge-0/0/41.0,
@@ -482,10 +612,10 @@ class JuniperNetworkOutputParser(CommonSwitchParser):
                             else:
                                 vlan.status = VlanStatus.INACTIVE
 
+                            # 'p' can either be a port or a trunk
                             if p in interfaces:
                                 interfaces[p].add_vlan(vlan)
-
-                            elif p in self.trunks: #TODO CHECK FOR TRUNKS
+                            elif p in self.trunks:
                                 for port in self.trunks[p].ports:
                                     if port in interfaces:
                                         interfaces[port].add_vlan(vlan)
@@ -555,13 +685,53 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         return Device()
 
     def parse_devices_from_lldp_remote_info(self, device, lldp_summary):
+        """
+        Example of "lldpctl" command result:
+
+        -------------------------------------------------------------------------------
+        LLDP neighbors:
+        -------------------------------------------------------------------------------
+        Interface:    eth0, via: LLDP, RID: 1, Time: 28 days, 00:41:39
+          Chassis:     
+            ChassisID:    mac 00:21:f7:1e:25:80
+            SysName:      INFO290024-1
+            SysDescr:     ProCurve J9049A Switch 2900-24G, revision T.13.71, ROM K.12.12 (/sw/code/build/mbm(t3a))
+            Capability:   Bridge, on
+            Capability:   Router, off
+          Port:        
+            PortID:       local 7
+            PortDescr:    7
+            PMD autoneg:  supported: yes, enabled: yes
+              Adv:          10Base-T, HD: yes, FD: yes
+              Adv:          100Base-T, HD: yes, FD: yes
+              Adv:          1000Base-T, HD: no, FD: yes
+              MAU oper type: 1000BaseTFD - Four-pair Category 5 UTP, full duplex mode
+        -------------------------------------------------------------------------------
+        Interface:    eth1, via: LLDP, RID: 1, Time: 28 days, 00:41:40
+          Chassis:     
+            ChassisID:    mac 00:21:f7:1e:25:80
+            SysName:      INFO290024-1
+            SysDescr:     ProCurve J9049A Switch 2900-24G, revision T.13.71, ROM K.12.12 (/sw/code/build/mbm(t3a))
+            Capability:   Bridge, on
+            Capability:   Router, off
+          Port:        
+            PortID:       local 8
+            PortDescr:    8
+            PMD autoneg:  supported: yes, enabled: yes
+              Adv:          10Base-T, HD: yes, FD: yes
+              Adv:          100Base-T, HD: yes, FD: yes
+              Adv:          1000Base-T, HD: no, FD: yes
+              MAU oper type: 1000BaseTFD - Four-pair Category 5 UTP, full duplex mode
+        -------------------------------------------------------------------------------
+        root@kvm2:~#
+        """
         devices = []
 
         try:
             neighbor = Device()
             interface = Interface()
 
-            interesting_lines = lldp_summary.splitlines()[4:] # Skip header
+            interesting_lines = lldp_summary.splitlines()[4:]  # Skip header
             for line in interesting_lines:
                 if ':' in line:
                     key, value = self._extract_key_and_value_from_line(line)
@@ -602,7 +772,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
 
                 # We need to store the port as the vlan 'name' attribute so
                 # we can enter the 'associate_vlans_to_interfaces()' function
-                # in order to verify if it is a bonding.
+                # in order to verify later if it is a bonding.
                 vlans[vlan_id] = Vlan(identifier=vlan_id, name=port)
 
         except Exception as e:
@@ -657,6 +827,37 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
         return self.trunks
 
     def parse_vms_list(self, vm_result):
+        """
+        Example of "virsh list --all" command result:
+
+         Id    Name                           State
+        ----------------------------------------------------
+         1     altiris-webdav                 running
+         13    iutrs3                         running
+         16    dindon                         running
+         19    canette                        running
+         20    nfs-test                       running
+
+        root@iutrs-kvm8:~#
+
+        Another example of "virsh list --all" command result:
+
+         ID    Nom                            État
+        ----------------------------------------------------
+         4     ubuntu1                        en cours d'exécution
+         49    O'gyalla                       en cours d'exécution
+         119   Acrobatt-GB2                   en cours d'exécution
+         136   UBUNTU_ACROBATT_BTRAUTMANN     en cours d'exécution
+         137   UBUNTU_ACROBATT_BTRAUTMANN2    en cours d'exécution
+         146   Acrobatt-GB1                   en cours d'exécution
+         166   Acrobatt-SR-Thor               en cours d'exécution
+         239   VM-ARS-HA-Ubuntu               en cours d'exécution
+         -     Acrobatt-GB1-Clone             fermé
+         -     Acrobatt-GB1-FinalClone        fermé
+         -     VM-ARS-PA-Ubuntu14             fermé
+
+        root@iutrs-etu-kvm1:~#
+        """
         vms = []
         try:
             name_index = None
@@ -674,7 +875,7 @@ class LinuxNetworkOutputParser(NetworkOutputParser):
                     state_index = line.find(targets_fr[1])
 
                 elif "----" not in line and self.wait_string not in line and \
-                     all(t is not None for t in[name_index, state_index]):
+                     all(t is not None for t in [name_index, state_index]):
 
                     identifier = line[:name_index-1].strip()
                     name = line[name_index:state_index-1].strip()

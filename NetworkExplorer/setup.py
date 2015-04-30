@@ -7,15 +7,15 @@ except ImportError:
     from distutils.core import setup
 
 config = {
-    name = 'NetworkExplorer',
+    name = 'networkmap',
     version = '0.1',
     description = 'Dynamically generate documentation for the topology of a \
-        computing network by exploring every accessible switch.',
+        computing network by exploring every accessible equipment.',
     url = 'https://bitbucket.org/iutrsinfo/networkmap',
     author = 'Marc-Antoine Fortier',
     author_email = 'marc22fortier@hotmail.com',
-    license = '?',
-    packages = ['NetworkExplorer'],
+    license = 'GPL',
+    packages = ['network_explorer'],
     zip_safe = False)
 
 setup(**config)

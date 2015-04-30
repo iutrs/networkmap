@@ -160,8 +160,8 @@ class Device(NetworkObject):
             JUNIPER_DEVICES: "juniper",
             LINUX_DEVICES: "linux"}
 
-        for pattern_list, code in type_map.iteritems():
-            if any(string in self.system_description for string in pattern_list):
+        for patterns, code in type_map.iteritems():
+            if any(string in self.system_description for string in patterns):
                 return code
         else:
             return None

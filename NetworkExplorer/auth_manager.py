@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 import ConfigParser
 import fnmatch
 import os
@@ -30,8 +31,8 @@ class AuthManager(object):
         """
         options = dict(self._parser.items(auth_section))
         if set(options) != set(["username", "password"]) and \
-            set(options) != set(["key", "username"]) and \
-            set(options) != set(["key", "username", "password"]):
+           set(options) != set(["key", "username"]) and \
+           set(options) != set(["key", "username", "password"]):
 
             raise AuthConfigError("Invalid auth section %s" % auth_section)
 
@@ -49,16 +50,18 @@ class AuthManager(object):
             # Option names are lowercased by the parser
             # fnmatch.fnmatch() is case-sensitive
             hostname = hostname.lower()
-            if fnmatch.fnmatch(hostname, pattern):
-                if section_name == "":
-                    raise NoAuthRequested("No auth requested for %s" % hostname)
+            if not fnmatch.fnmatch(hostname, pattern):
+                continue
 
-                full_section_name = "Auth.%s" % section_name
-                try:
-                    return self._get_options(full_section_name)
-                except ConfigParser.NoSectionError:
-                    raise AuthConfigError(
-                        "Auth section %s does not exist" % section_name)
+            if section_name == "":
+                raise NoAuthRequested("No auth requested for %s" % hostname)
+
+            full_section_name = "Auth.%s" % section_name
+            try:
+                return self._get_options(full_section_name)
+            except ConfigParser.NoSectionError:
+                raise AuthConfigError(
+                    "Auth section %s does not exist" % section_name)
 
         # Find by device, or fallback to defaults if defined
         full_section_name = "Auth.%s" % device_type
@@ -69,8 +72,8 @@ class AuthManager(object):
                 continue
 
         raise AuthConfigError(
-            "No Auth method provided for host {} ({})".format(
-            hostname, device_type))
+            "No Auth method provided for host {} ({})".format(hostname,
+                                                              device_type))
 
 
 import unittest
@@ -120,8 +123,7 @@ username = admin_juniper
 
     def test_by_plain_name_no_auth(self):
         with self.assertRaises(NoAuthRequested):
-            params = self.auth_manager.get_params(
-                "hostname_noauth", "hp")
+            params = self.auth_manager.get_params("hostname_noauth", "hp")
 
     def test_by_plain_name(self):
         params = self.auth_manager.get_params(

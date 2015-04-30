@@ -92,7 +92,7 @@ class NetworkExplorer(object):
                     raise ValueError()
             except Exception as e:
                 logging.error(
-                    "[%s] Unable to parse lldp local report using (%s): %s",
+                    "[%s] Unable to parse lldp local report using %s: %s",
                     self.hostname,
                     self.network_parser.__class__.__name__,
                     e)
@@ -268,13 +268,22 @@ class NetworkExplorer(object):
             receive_buffer = ""
             wait_string = self.network_parser.wait_string
             length_when_mark_detected = 0
+            empty_buffer_count = 0
             while True:
-                time.sleep(0.1)
-                receive_buffer += self._receive_ssh_output()
-                if len(receive_buffer) == length_when_mark_detected != 0:
-                    break
+                temp_buffer = self._receive_ssh_output()
+                receive_buffer += temp_buffer
+                if not temp_buffer:
+                    empty_buffer_count += 1
+                else:
+                    empty_buffer_count = 0
+
                 if wait_string in receive_buffer[length_when_mark_detected:]:
                     length_when_mark_detected = len(receive_buffer)
+
+                if length_when_mark_detected > 0 and empty_buffer_count == 3:
+                    break
+
+                time.sleep(0.1)
 
             logging.debug("[%s] Got response (len=%d)", self.hostname, length_when_mark_detected)
             return receive_buffer

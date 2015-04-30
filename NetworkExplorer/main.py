@@ -126,6 +126,7 @@ def main():
         # We're done when there aren't any process left
         if len(jobs) == 0:
             break
+        time.sleep(1)
 
     if len(explored_devices) > 0:
         _write_results_to_file(explored_devices, conf.outputfile)

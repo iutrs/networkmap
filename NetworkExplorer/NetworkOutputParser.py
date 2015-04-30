@@ -81,7 +81,6 @@ class CommonSwitchParser(NetworkOutputParser):
                         key, value = self._extract_key_and_value_from_line(line)
                         self._attribute_lldp_remote_info(neighbor, key, value)
                     except Exception as e:
-                        print e
                         logging.error(
                             "Could not parse network devices from %s:%s",
                             detail, e)

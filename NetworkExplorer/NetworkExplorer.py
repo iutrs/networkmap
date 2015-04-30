@@ -135,6 +135,12 @@ class NetworkExplorer(object):
         Obtain the list of all lldp neighbors
         """
         lldp_neighbors_summary = self._get_lldp_neighbors()
+        # With lldpd on Linux, the lldp summary already contains all details
+        if self.network_parser.lldp_neighbors_detail_cmd is None:
+            neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
+                device, lldp_neighbors_summary)
+            return neighbors
+
         device.interfaces = self.network_parser\
             .parse_interfaces_from_lldp_remote_info(lldp_neighbors_summary)
 
@@ -142,20 +148,15 @@ class NetworkExplorer(object):
             neighbors = []
             return neighbors
 
-        # With lldpd on Linux, the lldp summary already contains all details
-        if self.network_parser.lldp_neighbors_detail_cmd is None:
-            neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
-                device, lldp_neighbors_summary)
-        else:
-            lldp_neighbors_details = []
-            for interface in device.interfaces.values():
-                if interface.is_valid_lldp_interface():
-                    port = interface.local_port
-                    detail = self._get_lldp_neighbor_detail(port)
-                    lldp_neighbors_details.append(detail)
+        lldp_neighbors_details = []
+        for interface in device.interfaces.values():
+            if interface.is_valid_lldp_interface():
+                port = interface.local_port
+                detail = self._get_lldp_neighbor_detail(port)
+                lldp_neighbors_details.append(detail)
 
-            neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
-                device, lldp_neighbors_details)
+        neighbors = self.network_parser.parse_devices_from_lldp_remote_info(
+            device, lldp_neighbors_details)
 
         return neighbors
 

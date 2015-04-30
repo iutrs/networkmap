@@ -60,14 +60,20 @@ class NetworkExplorer(object):
             self._open_ssh_connection()
         except NoAuthRequested as e:
             logging.info("[%s] No auth requested", self.hostname)
+            self.device.status = DeviceStatus.NO_AUTH_REQUESTED
             return
         except paramiko.AuthenticationException as pae:
             logging.error("[%s] Authentication failed: %s", self.hostname, pae)
+            self.device.status = DeviceStatus.AUTH_FAILED
             return
         except Exception as e:
             logging.error("[%s] Could not open SSH connection: %s",
                 self.hostname, e)
+            self.device.status = DeviceStatus.UNREACHABLE
             return
+        finally:
+            if self.device.mac_address:
+                explored_devices[self.device.mac_address] = self.device
 
         # Determining the type of the current device from the switch banner
         banner = self._receive_ssh_output()

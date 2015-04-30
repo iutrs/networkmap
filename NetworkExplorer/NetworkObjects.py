@@ -107,6 +107,12 @@ class Interface(NetworkObject):
             )
 
 
+class DeviceStatus():
+    NO_AUTH_REQUESTED = "No authentication requested"
+    AUTH_FAILED = "Authentication failed"
+    UNREACHABLE = "Unreachable"
+
+
 class Device(NetworkObject):
     def __init__(
             self,
@@ -119,7 +125,8 @@ class Device(NetworkObject):
             enabled_capabilities=None,
             interfaces=None,
             trunks=None,
-            virtual_machines=None):
+            virtual_machines=None,
+            status=None):
 
         self.mac_address = mac_address
         self.ip_address = ip_address
@@ -131,6 +138,7 @@ class Device(NetworkObject):
         self.interfaces = interfaces or {}
         self.trunks = trunks or {}
         self.virtual_machines = virtual_machines or []
+        self.status = status
 
     def is_valid_lldp_device(self):
         return \

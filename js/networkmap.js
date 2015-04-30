@@ -714,6 +714,12 @@ function updateColor(color, variable) {
 
     store(variable, color, false);
 
+    $("#vlans-feedback").flash_message({
+        text: "Color settings saved.",
+        how: "append",
+        class_name: "text-success"
+    });
+
     highlightVlanDiffusion(selectedVlanId);
 }
 
@@ -1030,6 +1036,12 @@ function edgeExists(link) {
  */
 function storePositions() {
     store("nodesPosition", network.getPositions(), true);
+
+    $("#options-feedback").flash_message({
+        text: "Positions stored in local storage.",
+        how: "append",
+        class_name: "text-success"
+    });
 }
 
 /**
@@ -1039,7 +1051,21 @@ function clearPositions() {
     if (getPositions()) {
         clear("nodesPosition");
         draw();
+
+        $("#options-feedback").flash_message({
+            text: "Positions cleared from local storage.",
+            how: "append",
+            class_name: "text-success"
+        });
     }
+    else {
+        $("#options-feedback").flash_message({
+            text: "Positions already cleared.",
+            how: "append",
+            class_name: "text-danger"
+        });
+    }
+
 }
 
 /**
@@ -1153,3 +1179,33 @@ function comparePortNames(a, b) {
         return true;
     }
 }
+
+/**
+ * Flash messages jQuery function from http://jsfiddle.net/vwvAd/446/
+ */
+(function($) {
+    $.fn.flash_message = function(options) {
+        options = $.extend({
+            text: 'Done',
+            time: 1500,
+            how: 'before',
+            class_name: ''
+        }, options);
+
+        return $(this).each(function() {
+            if( $(this).parent().find('.flash_message').get(0) )
+                return;
+
+            var message = $('<span />', {
+                'class': 'flash_message ' + options.class_name,
+                text: options.text
+            }).hide().fadeIn('fast');
+
+            $(this)[options.how](message);
+
+            message.delay(options.time).fadeOut('normal', function() {
+                $(this).remove();
+            });
+        });
+    };
+})(jQuery);

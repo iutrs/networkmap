@@ -435,7 +435,7 @@ function buildEdgeDescription(edge) {
         }
     }
 
-    var html = "<div class='table-responsive'><table class='table table-hover'>";
+    html += "<div class='table-responsive'><table class='table table-hover'>";
     html += "<thead><tr><th class='col-md-6'>" + deviceFrom.system_name + "</th>";
     html += "<th class='col-md-6'>" + deviceTo.system_name + "</th></tr></thead><tbody>";
 

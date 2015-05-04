@@ -2,6 +2,10 @@
 
 A python-javascript platform that generates documentation for the topology of a computing network by exploring every accessible equipment using the ssh protocol.
 
+## License ##
+
+networkmap is licensed under the GNU GENERAL PUBLIC LICENSE https://www.gnu.org/licenses/gpl-3.0.en.html
+
 ## Running the network exploration ##
 
 ### Prerequisites ###
@@ -51,11 +55,47 @@ Simply open **networkmap.html** in your browser! If it fails to load the *device
 
 ## Dependencies (To be completed) ##
 
-* **paramiko** https://github.com/paramiko/paramiko
-* **vis.js** https://github.com/almende/vis
-* **jQuery** https://jquery.com
-* **typeahead** (Optional) https://github.com/twitter/typeahead.js/
+### paramiko ###
+https://github.com/paramiko/paramiko
 
-## License ##
+Licensed under [LGPL](http://opensource.org/licenses/lgpl-license).
+    
+Requirements:
 
-networkmap is licensed under the GNU GENERAL PUBLIC LICENSE https://www.gnu.org/licenses/gpl-3.0.en.html
+* Python 2.6 or better http://www.python.org/ - this includes Python 3.2 and higher as well. 
+* pycrypto 2.1 or better https://www.dlitz.net/software/pycrypto/
+* ecdsa 0.9 or better https://pypi.python.org/pypi/ecdsa
+
+
+### vis.js ###
+https://github.com/almende/vis (Network module)
+
+Licensed under [The Apache 2.0 License](http://www.apache.org/licenses/LICENSE-2.0) and  [The MIT License](http://opensource.org/licenses/MIT). 
+    
+No requirements. **See *vis-modifications.txt* for what have been modified.**
+
+
+### jQuery ###
+https://jquery.com
+
+Liecnsed under [The MIT License](https://tldrlegal.com/license/mit-license).
+
+No requirements.
+
+
+### typeahead ###
+https://github.com/twitter/typeahead.js/
+
+Licensed under [The MIT License](https://tldrlegal.com/license/mit-license).
+    
+Requirements :
+
+* JQuery 1.9+
+
+
+### OSA Icon Library 13.05 ###
+http://www.opensecurityarchitecture.org/cms/library/icon-library
+
+Licensed under the [Creative Commons Share-alike](http://www.opensecurityarchitecture.org/cms/about/license-terms).
+
+No requirements.

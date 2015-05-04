@@ -4,7 +4,7 @@ A python-javascript platform that generates documentation for the topology of a 
 
 ## License ##
 
-networkmap is licensed under the GNU GENERAL PUBLIC LICENSE https://www.gnu.org/licenses/gpl-3.0.en.html
+networkmap is licensed under the [GNU GENERAL PUBLIC LICENSE](https://www.gnu.org/licenses/gpl-3.0.en.html).
 
 ## Running the network exploration ##
 

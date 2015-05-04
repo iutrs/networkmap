@@ -5,7 +5,7 @@ A python-javascript platform that generates documentation for the topology of a 
 ## Running the network exploration ##
 
 ### Prerequisites ###
-The network exploration module of networkmap is written using [Python 2.7](http://www.python.org/). It relies on [paramiko](https://github.com/paramiko/paramiko)'s library in order to establish the ssh connections with the devices on the network.
+The network exploration module of networkmap is written using [Python 2.7](http://www.python.org/). It relies on the [paramiko](https://github.com/paramiko/paramiko) library in order to establish the ssh connections with the network devices.
 
 ### Usage ###
 
@@ -15,7 +15,7 @@ The **explorer** package contains the python scripts used to explore a network. 
 
     python explorer/main.py path/to/config/file.txt
 
-One the exploration is done (when no more device is to be explored and), it will generate the file *devices.json* which contains all the informations gathered during the exploration. If there is any error during the exploration, relevant error messages will indicate the source(s) of the problem(s).
+Once the exploration is done (when no more device is to be explored), it will generate the file *devices.json* which contains all the informations gathered during the exploration. If there is any error during the exploration, relevant error messages will indicate the source(s) of the problem(s).
 
 ### Functionalities ###
 * Type of devices supported:
@@ -27,13 +27,13 @@ One the exploration is done (when no more device is to be explored and), it will
     * Global informations provided by LLDP (MAC and IP Address, system description, etc.)
     * LLDP connected interfaces
     * Virtual machines informations (Linux servers only)
-* Multiprocessing for faster discovery (each device is explorer on a new process)
-* Specify the autentication method for individual or groups of devices
+* Multiprocessing for faster discovery (each device is explored in a new process)
+* Specify the authentication method for individual or groups of devices
 
 ## Visualizing the generated network topology ##
 
 ### Prerequisites ###
-networkmap is based on [vis.js](https://github.com/almende/vis)'s visualization library. It requires [jQuery](https://jquery.com) and uses [typeahead](https://github.com/twitter/typeahead.js/) to easily find and focus on a device in the network.
+networkmap is based on the [vis.js](https://github.com/almende/vis) visualization library. It requires [jQuery](https://jquery.com) and uses [typeahead](https://github.com/twitter/typeahead.js/) to easily find and focus on a device in the network graph.
 
 ### Usage ###
 Simply open **networkmap.html** in your browser! If it fails to load the *devices.json* file, make sure both files are located in the same directory.

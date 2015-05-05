@@ -78,7 +78,7 @@ No requirements. **See *vis-modifications.txt* for what have been modified.**
 ### jQuery ###
 https://jquery.com
 
-Liecnsed under [The MIT License](https://tldrlegal.com/license/mit-license).
+Licensed under [The MIT License](https://tldrlegal.com/license/mit-license).
 
 No requirements.
 

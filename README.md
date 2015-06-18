@@ -53,6 +53,9 @@ Simply open **networkmap.html** in your browser! If it fails to load the *device
     * Store and clear the nodes' positions to keep your layout
 * Show virtual machines nodes for Linux servers [BETA]
 
+### Demo ###
+http://manu.agat.net/networkmap/
+
 ## Dependencies (To be completed) ##
 
 ### paramiko ###
